@@ -1,0 +1,31 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://lazyfood_user:lazyfood_pass@db:5432/lazyfood_db
+      # SECRET_KEY y GOOGLE_AI_API_KEY se cargan desde .env
+    depends_on:
+      - db
+    volumes:
+      - ./src:/app
+    restart: unless-stopped
+
+  db:
+    image: postgres
+    environment:
+      POSTGRES_USER: lazyfood_user
+      POSTGRES_PASSWORD: lazyfood_pass
+      POSTGRES_DB: lazyfood_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
