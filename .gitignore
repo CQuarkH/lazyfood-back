@@ -1,1 +1,29 @@
+# Environment variables
 .env
+.env.local
+.env.production
+.env.development
+
+# API keys and secrets
+*_key
+*_token
+*_secret
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
