@@ -1,3 +1,4 @@
+# modules/recipe/models.py
 from core.database import db
 
 
@@ -9,7 +10,7 @@ class Receta(db.Model):
     tiempo_preparacion = db.Column(db.Integer)  # en minutos
     calorias = db.Column(db.Integer)  # calorías por porción
     nivel_dificultad = db.Column(db.Integer, default=1)  # 1: fácil, 2: medio, 3: difícil
-    imagen_url = db.Column(db.Text)
+    emoji = db.Column(db.String(8))  # emoji representativo
 
     # Relaciones
     pasos = db.relationship('PasoReceta', backref='receta', cascade='all, delete-orphan',
@@ -18,14 +19,13 @@ class Receta(db.Model):
     planificaciones = db.relationship('Planificador', backref='receta', cascade='all, delete-orphan')
 
     def to_dict(self, include_pasos=False):
-        """Convertir receta a diccionario"""
         data = {
             'id': self.id,
             'nombre': self.nombre,
             'tiempo': self.tiempo_preparacion,
             'calorias': self.calorias,
             'nivel': self.nivel_dificultad,
-            'imagen_url': self.imagen_url
+            'emoji': self.emoji
         }
 
         if include_pasos:
@@ -43,11 +43,9 @@ class PasoReceta(db.Model):
     instruccion = db.Column(db.Text, nullable=False)
     temporizador_segundos = db.Column(db.Integer)  # segundos para el temporizador
 
-    # Restricción única para evitar pasos duplicados en una receta
     __table_args__ = (db.UniqueConstraint('receta_id', 'numero_paso', name='uq_receta_paso'),)
 
     def to_dict(self):
-        """Convertir paso a diccionario"""
         return {
             'n': self.numero_paso,
             'instruccion': self.instruccion,
@@ -65,7 +63,6 @@ class SugerenciaReceta(db.Model):
     fecha = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     def to_dict(self):
-        """Convertir sugerencia a diccionario"""
         return {
             'id': self.id,
             'usuario_id': self.usuario_id,

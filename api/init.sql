@@ -1,3 +1,4 @@
+-- init.sql (actualizado)
 -- Crear extensiones necesarias
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -28,7 +29,8 @@ CREATE TABLE ingrediente (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     categoria VARCHAR(50),
-    unidad VARCHAR(20)
+    unidad VARCHAR(20),
+    emoji VARCHAR(8)  -- emoji representativo (ej: "🍅")
 );
 
 -- Tabla de inventario
@@ -39,6 +41,7 @@ CREATE TABLE inventario (
     cantidad DECIMAL(10,2),
     confianza DECIMAL(3,2) DEFAULT 1.0,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    bounding_box JSONB, -- bounding box normalizada {x,y,width,height}
     UNIQUE(usuario_id, ingrediente_id)
 );
 
@@ -49,7 +52,7 @@ CREATE TABLE receta (
     tiempo_preparacion INTEGER,
     calorias INTEGER,
     nivel_dificultad INTEGER DEFAULT 1,
-    imagen_url TEXT
+    emoji VARCHAR(8) -- emoji representativo de la receta
 );
 
 -- Tabla de pasos de receta
@@ -91,7 +94,7 @@ CREATE TABLE token (
 );
 
 -- =============================================================================
--- DATOS DE PRUEBA
+-- DATOS DE PRUEBA (con emojis)
 -- =============================================================================
 
 -- Insertar usuarios de ejemplo
@@ -106,64 +109,64 @@ INSERT INTO preferencia (usuario_id, dieta, alergias, gustos) VALUES
 (2, 'vegetariano', '["lactosa"]', '["queso", "pan", "verduras"]'),
 (3, 'omnivoro', '[]', '["carne", "pescado", "legumbres"]');
 
--- Insertar ingredientes base
-INSERT INTO ingrediente (nombre, categoria, unidad) VALUES
-('Tomate', 'verdura', 'unidades'),
-('Cebolla', 'verdura', 'unidades'),
-('Ajo', 'verdura', 'dientes'),
-('Pasta', 'granos', 'gramos'),
-('Arroz', 'granos', 'gramos'),
-('Pollo', 'proteina', 'gramos'),
-('Huevos', 'proteina', 'unidades'),
-('Leche', 'lácteo', 'ml'),
-('Queso', 'lácteo', 'gramos'),
-('Aceite de Oliva', 'condimento', 'ml'),
-('Sal', 'condimento', 'gramos'),
-('Pimienta', 'condimento', 'gramos'),
-('Pan', 'granos', 'rebanadas'),
-('Mantequilla', 'lácteo', 'gramos'),
-('Jamón', 'proteina', 'gramos'),
-('Manzana', 'fruta', 'unidades'),
-('Plátano', 'fruta', 'unidades'),
-('Zanahoria', 'verdura', 'unidades'),
-('Papa', 'verdura', 'unidades'),
-('Brócoli', 'verdura', 'gramos');
+-- Insertar ingredientes base con emoji
+INSERT INTO ingrediente (nombre, categoria, unidad, emoji) VALUES
+('Tomate', 'verdura', 'unidades', '🍅'),
+('Cebolla', 'verdura', 'unidades', '🧅'),
+('Ajo', 'verdura', 'dientes', '🧄'),
+('Pasta', 'granos', 'gramos', '🍝'),
+('Arroz', 'granos', 'gramos', '🍚'),
+('Pollo', 'proteina', 'gramos', '🍗'),
+('Huevos', 'proteina', 'unidades', '🥚'),
+('Leche', 'lácteo', 'ml', '🥛'),
+('Queso', 'lácteo', 'gramos', '🧀'),
+('Aceite de Oliva', 'condimento', 'ml', '🫗'),
+('Sal', 'condimento', 'gramos', '🧂'),
+('Pimienta', 'condimento', 'gramos', '🧂'),
+('Pan', 'granos', 'rebanadas', '🍞'),
+('Mantequilla', 'lácteo', 'gramos', '🧈'),
+('Jamón', 'proteina', 'gramos', '🍖'),
+('Manzana', 'fruta', 'unidades', '🍎'),
+('Plátano', 'fruta', 'unidades', '🍌'),
+('Zanahoria', 'verdura', 'unidades', '🥕'),
+('Papa', 'verdura', 'unidades', '🥔'),
+('Brócoli', 'verdura', 'gramos', '🥦');
 
--- Insertar algunas recetas de ejemplo
-INSERT INTO receta (nombre, tiempo_preparacion, calorias, nivel_dificultad, imagen_url) VALUES
-('Ensalada de Tomate', 10, 150, 1, 'https://cdn.lazyfood.com/recetas/ensalada_tomate.jpg'),
-('Pasta con Tomate', 20, 320, 1, 'https://cdn.lazyfood.com/recetas/pasta_tomate.jpg'),
-('Huevos Revueltos', 5, 200, 1, 'https://cdn.lazyfood.com/recetas/huevos_revueltos.jpg'),
-('Sándwich de Jamón y Queso', 5, 350, 1, 'https://cdn.lazyfood.com/recetas/sandwich.jpg'),
-('Arroz Blanco', 15, 200, 1, 'https://cdn.lazyfood.com/recetas/arroz_blanco.jpg'),
-('Brócoli al Vapor', 10, 80, 1, 'https://cdn.lazyfood.com/recetas/brocoli_vapor.jpg');
+-- Insertar recetas de ejemplo (emoji en lugar de imagen_url)
+INSERT INTO receta (nombre, tiempo_preparacion, calorias, nivel_dificultad, emoji) VALUES
+('Ensalada de Tomate', 10, 150, 1, '🥗'),
+('Pasta con Tomate', 20, 320, 1, '🍝'),
+('Huevos Revueltos', 5, 200, 1, '🍳'),
+('Sándwich de Jamón y Queso', 5, 350, 1, '🥪'),
+('Arroz Blanco', 15, 200, 1, '🍚'),
+('Brócoli al Vapor', 10, 80, 1, '🥦');
 
 -- Insertar pasos para las recetas
 INSERT INTO paso_receta (receta_id, numero_paso, instruccion, temporizador_segundos) VALUES
--- Pasta con Tomate
+-- Pasta con Tomate (id 2)
 (2, 1, 'Hervir agua con sal en una olla grande', 300),
 (2, 2, 'Cocinar la pasta según las instrucciones del paquete', 600),
 (2, 3, 'Picar tomates y ajo finamente', NULL),
 (2, 4, 'Saltear tomate y ajo en aceite de oliva', 180),
 (2, 5, 'Mezclar la pasta con la salsa y servir', NULL),
--- Huevos Revueltos
+-- Huevos Revueltos (id 3)
 (3, 1, 'Batir los huevos en un bol', NULL),
 (3, 2, 'Calentar mantequilla en una sartén', 60),
 (3, 3, 'Verter los huevos y cocinar revolviendo constantemente', 180),
 (3, 4, 'Servir caliente', NULL),
--- Sándwich de Jamón y Queso
+-- Sándwich de Jamón y Queso (id 4)
 (4, 1, 'Tomar dos rebanadas de pan', NULL),
 (4, 2, 'Colocar jamón y queso entre las rebanadas', NULL),
 (4, 3, 'Tostar en sándwichera por 3 minutos', 180),
 (4, 4, 'Servir caliente', NULL);
 
--- Insertar inventario inicial para el usuario 1
+-- Insertar inventario inicial para el usuario 1 (bounding_box NULL posible)
 INSERT INTO inventario (usuario_id, ingrediente_id, cantidad, confianza) VALUES
 (1, 1, 3, 0.95),  -- Tomate
 (1, 4, 500, 0.90), -- Pasta
 (1, 10, 100, 0.85), -- Aceite de Oliva
 (1, 11, 50, 0.80), -- Sal
-(2, 6, 2, 0.95),  -- Huevos (usuario 2)
+(2, 7, 12, 0.95),  -- Huevos (usuario 2)
 (2, 13, 8, 0.90), -- Pan (usuario 2)
 (2, 14, 100, 0.85); -- Mantequilla (usuario 2)
 
