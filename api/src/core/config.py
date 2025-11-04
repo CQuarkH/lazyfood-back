@@ -22,9 +22,11 @@ class Config:
     }
 
     # Configuración de Google AI (Gemini)
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+    GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY', '')
     GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
-
+    
+    
+    
     # Configuración de correo electrónico
     MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
     MAIL_PORT = int(os.getenv('MAIL_PORT', '587'))
