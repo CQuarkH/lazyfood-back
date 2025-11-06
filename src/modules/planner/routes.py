@@ -1,5 +1,7 @@
 from flask import Blueprint, request, jsonify
 from core.database import db
+from core.auth_middleware import token_required
+from core.role_middleware import owner_or_admin_required
 from modules.user.models import Usuario
 from modules.planner.planning_service import planning_service
 from datetime import datetime, timedelta
@@ -9,13 +11,21 @@ planner_bp = Blueprint('planner', __name__)
 
 
 @planner_bp.route('/v1/planificador/semana/<int:user_id>', methods=['PUT'])
+@token_required
 def crear_actualizar_planificacion(user_id):
     """
     Crear o actualizar planificación semanal
     ---
     tags:
       - Planificador
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - name: user_id
         in: path
         type: integer
@@ -146,13 +156,21 @@ def crear_actualizar_planificacion(user_id):
 
 
 @planner_bp.route('/v1/planificador/semana/<int:user_id>', methods=['GET'])
+@token_required
 def obtener_planificacion(user_id):
     """
     Obtener planificación semanal
     ---
     tags:
       - Planificador
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - name: user_id
         in: path
         type: integer
@@ -261,13 +279,21 @@ def obtener_planificacion(user_id):
 
 
 @planner_bp.route('/v1/planificador/semana/sugerencias/<int:user_id>', methods=['GET'])
+@token_required
 def obtener_sugerencias_planificacion(user_id):
     """
     Obtener sugerencias de planificación semanal generadas por IA
     ---
     tags:
       - Planificador
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - name: user_id
         in: path
         type: integer

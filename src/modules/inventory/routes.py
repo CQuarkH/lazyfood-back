@@ -1,5 +1,7 @@
 from flask import Blueprint, request, jsonify
 from core.database import db
+from core.auth_middleware import token_required
+from core.role_middleware import owner_or_admin_required
 from modules.user.models import Usuario
 from modules.inventory.models import Ingrediente, Inventario
 
@@ -8,13 +10,21 @@ inventory_bp = Blueprint('inventory', __name__)
 
 
 @inventory_bp.route('/v1/ingredientes', methods=['PUT'])
+@token_required
 def actualizar_inventario():
     """
     Actualizar inventario de usuario
     ---
     tags:
       - Inventario
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - name: userId
         in: query
         type: integer
@@ -200,13 +210,21 @@ def _procesar_ingrediente(usuario_id, ingrediente_data):
 
 
 @inventory_bp.route('/v1/ingredientes', methods=['GET'])
+@token_required
 def obtener_inventario():
     """
     Obtener inventario de usuario
     ---
     tags:
       - Inventario
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - name: userId
         in: query
         type: integer

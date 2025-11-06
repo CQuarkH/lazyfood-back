@@ -7,6 +7,7 @@ CREATE TABLE usuario (
     nombre VARCHAR(100) NOT NULL,
     correo VARCHAR(150) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
+    rol VARCHAR(20) DEFAULT 'user' NOT NULL,
     pais VARCHAR(50),
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     nivel_cocina INTEGER DEFAULT 1,
@@ -94,17 +95,20 @@ CREATE TABLE token (
 -- DATOS DE PRUEBA
 -- =============================================================================
 
--- Insertar usuarios de ejemplo
-INSERT INTO usuario (nombre, correo, password, pais, nivel_cocina) VALUES
-('Carlos Pérez', 'carlos@ejemplo.com', 'password123', 'Chile', 2),
-('María González', 'maria@ejemplo.com', 'password123', 'Argentina', 1),
-('Ana Silva', 'ana@ejemplo.com', 'password123', 'Chile', 3);
+-- Insertar usuarios de ejemplo (passwords hasheados con bcrypt)
+-- Password para todos: Password123!
+INSERT INTO usuario (nombre, correo, password, rol, pais, nivel_cocina) VALUES
+('Admin User', 'admin@lazyfood.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5lE7ZGBvxLhzu', 'admin', 'Chile', 3),
+('Carlos Pérez', 'carlos@ejemplo.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5lE7ZGBvxLhzu', 'user', 'Chile', 2),
+('María González', 'maria@ejemplo.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5lE7ZGBvxLhzu', 'user', 'Argentina', 1),
+('Ana Silva', 'ana@ejemplo.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5lE7ZGBvxLhzu', 'user', 'Chile', 3);
 
 -- Insertar preferencias de ejemplo
 INSERT INTO preferencia (usuario_id, dieta, alergias, gustos) VALUES
-(1, 'vegano', '["nueces", "mariscos"]', '["pasta", "ensaladas", "frutas"]'),
-(2, 'vegetariano', '["lactosa"]', '["queso", "pan", "verduras"]'),
-(3, 'omnivoro', '[]', '["carne", "pescado", "legumbres"]');
+(1, 'omnivoro', '[]', '["todo"]'),
+(2, 'vegano', '["nueces", "mariscos"]', '["pasta", "ensaladas", "frutas"]'),
+(3, 'vegetariano', '["lactosa"]', '["queso", "pan", "verduras"]'),
+(4, 'omnivoro', '[]', '["carne", "pescado", "legumbres"]');
 
 -- Insertar ingredientes base
 INSERT INTO ingrediente (nombre, categoria, unidad) VALUES
@@ -159,13 +163,13 @@ INSERT INTO paso_receta (receta_id, numero_paso, instruccion, temporizador_segun
 
 -- Insertar inventario inicial para el usuario 1
 INSERT INTO inventario (usuario_id, ingrediente_id, cantidad, confianza) VALUES
-(1, 1, 3, 0.95),  -- Tomate
-(1, 4, 500, 0.90), -- Pasta
-(1, 10, 100, 0.85), -- Aceite de Oliva
-(1, 11, 50, 0.80), -- Sal
-(2, 6, 2, 0.95),  -- Huevos (usuario 2)
-(2, 13, 8, 0.90), -- Pan (usuario 2)
-(2, 14, 100, 0.85); -- Mantequilla (usuario 2)
+(2, 1, 3, 0.95),  -- Tomate (usuario 2)
+(2, 4, 500, 0.90), -- Pasta (usuario 2)
+(2, 10, 100, 0.85), -- Aceite de Oliva (usuario 2)
+(2, 11, 50, 0.80), -- Sal (usuario 2)
+(3, 6, 2, 0.95),  -- Huevos (usuario 3)
+(3, 13, 8, 0.90), -- Pan (usuario 3)
+(3, 14, 100, 0.85); -- Mantequilla (usuario 3)
 
 -- Crear índices para mejorar performance
 CREATE INDEX idx_inventario_usuario ON inventario(usuario_id);

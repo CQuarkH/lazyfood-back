@@ -1,7 +1,9 @@
 from flask import Blueprint, jsonify, request
 from core.database import db
 from modules.user.models import Usuario
-from passlib.hash import bcrypt
+from core.auth_middleware import token_required
+from core.role_middleware import role_required, admin_required, owner_or_admin_required
+import bcrypt
 import secrets
 from datetime import datetime, timedelta
 import re
@@ -91,12 +93,22 @@ def validar_nombre(nombre):
 
 
 @user_bp.route('/v1/usuarios', methods=['GET'])
+@token_required
+@admin_required
 def listar_usuarios():
     """
-    Listar todos los usuarios (solo desarrollo)
+    Listar todos los usuarios (solo administradores)
     ---
     tags:
       - Usuarios
+    security:
+      - Bearer: []
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
     responses:
       200:
         description: Lista de usuarios
@@ -328,7 +340,7 @@ def registrar_usuario():
             }), 409
 
         # Hashear la contraseña de forma segura
-        password_hash = bcrypt.hash(password)
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
         # Crear nuevo usuario
         nuevo_usuario = Usuario(
@@ -359,13 +371,21 @@ def registrar_usuario():
 
 
 @user_bp.route('/v1/usuarios/detalle', methods=['GET'])
+@token_required
 def obtener_usuario():
     """
     Obtener información de un usuario específico por ID
     ---
     tags:
       - Usuarios
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - in: query
         name: userId
         type: integer

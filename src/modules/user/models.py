@@ -10,6 +10,7 @@ class Usuario(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     correo = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
+    rol = db.Column(db.String(20), default='user', nullable=False)  # 'admin', 'user'
     pais = db.Column(db.String(50))
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     nivel_cocina = db.Column(db.Integer, default=1)  # 1: principiante, 2: intermedio, 3: avanzado
@@ -22,17 +23,23 @@ class Usuario(db.Model):
     planificador = db.relationship('Planificador', backref='usuario', cascade='all, delete-orphan')
     tokens = db.relationship('Token', backref='usuario', cascade='all, delete-orphan')
 
-    def to_dict(self):
+    def to_dict(self, include_sensitive=False):
         """Convertir usuario a diccionario"""
-        return {
+        data = {
             'id': self.id,
             'nombre': self.nombre,
             'correo': self.correo,
+            'rol': self.rol,
             'pais': self.pais,
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
             'nivel_cocina': self.nivel_cocina,
             'activo': self.activo
         }
+        
+        if include_sensitive:
+            data['password'] = self.password
+        
+        return data
 
 
 class Preferencia(db.Model):

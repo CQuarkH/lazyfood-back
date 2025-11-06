@@ -1,5 +1,7 @@
 from flask import Blueprint, request, jsonify
 from core.database import db
+from core.auth_middleware import token_required
+from core.role_middleware import owner_or_admin_required
 from modules.user.models import Usuario
 from modules.recipe.recommendation_service import recommendation_service
 
@@ -8,13 +10,21 @@ recipe_bp = Blueprint('recipe', __name__)
 
 
 @recipe_bp.route('/v1/recetas/sugerencias/<int:user_id>', methods=['GET'])
+@token_required
 def obtener_sugerencias_recetas(user_id):
     """
     Obtener sugerencias de recetas personalizadas
     ---
     tags:
       - Recetas
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - name: user_id
         in: path
         type: integer
@@ -141,13 +151,21 @@ def obtener_sugerencias_recetas(user_id):
 
 
 @recipe_bp.route('/v1/recetas/sugerencias/<int:user_id>/historial', methods=['GET'])
+@token_required
 def obtener_historial_recomendaciones(user_id):
     """
     Obtener historial de recomendaciones previas
     ---
     tags:
       - Recetas
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - name: user_id
         in: path
         type: integer
@@ -231,13 +249,21 @@ def obtener_historial_recomendaciones(user_id):
 
 
 @recipe_bp.route('/v1/recetas/<int:receta_id>', methods=['GET'])
+@token_required
 def obtener_detalle_receta(receta_id):
     """
     Obtener detalle completo de una receta
     ---
     tags:
       - Recetas
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - name: receta_id
         in: path
         type: integer
