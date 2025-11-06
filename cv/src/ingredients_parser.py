@@ -35,7 +35,7 @@ def find_ingredient(gemini_text, database):
 
 def parse_gemini_response_with_coords(json_response):
     """
-    Parse Gemini JSON with coordinates
+    Parse JSON with coordinates
     """
     try:
         # Clean markdown

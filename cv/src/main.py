@@ -1,4 +1,3 @@
-# main.py - GEMINI 2.0 FLASH CON BOUNDING BOXES
 import os
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +25,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-2.0-flash-exp')
-    logger.info("✅ Gemini configurado")
+    logger.info("Modelo AI configurado")
 else:
     model = None
     logger.warning("⚠️  GOOGLE_API_KEY no configurada")
@@ -63,7 +62,7 @@ class InventoryDetectionResponse(BaseModel):
 
 app = FastAPI(
     title="LazyFood ML Service",
-    description="Detección de ingredientes con Gemini 2.0 Flash + Bounding Boxes",
+    description="Detección de ingredientes con Bounding Boxes",
     version="2.0.0"
 )
 
@@ -76,7 +75,7 @@ app.add_middleware(
 )
 
 async def detect_with_gemini(image_bytes: bytes) -> tuple[str, tuple[int, int]]:
-    """Detecta ingredientes usando Gemini 2.0 Flash CON coordenadas"""
+    """Detecta ingredientes con coordenadas"""
     
     if not model:
         raise HTTPException(500, "GOOGLE_API_KEY no configurada")
@@ -138,18 +137,18 @@ Ejemplo real:
 
 Analiza la imagen y responde ÚNICAMENTE con el JSON, sin texto adicional antes o después."""
 
-        logger.info("🤖 Detectando con Gemini 2.0 Flash...")
+        logger.info("🤖 Detectando ingredientes...")
         
         # Generar respuesta
         response = model.generate_content([prompt, image])
         
-        logger.info("✅ Gemini respondió exitosamente")
+        logger.info("✅ Modelo AI respondió exitosamente")
         
         return response.text, image_dimensions
         
     except Exception as e:
-        logger.error(f"❌ Error con Gemini: {str(e)}")
-        raise HTTPException(500, f"Error procesando con Gemini: {str(e)}")
+        logger.error(f"❌ Error con Modelo AI: {str(e)}")
+        raise HTTPException(500, f"Error procesando con Modelo AI: {str(e)}")
 
 # ============ ENDPOINTS ============
 
@@ -158,7 +157,6 @@ async def root():
     return {
         "service": "LazyFood ML Service",
         "version": "2.0.0",
-        "model": "Gemini 2.0 Flash",
         "features": ["ingredient_detection", "bounding_boxes", "quantity_estimation"],
         "api_configured": model is not None,
         "status": "running"
@@ -245,7 +243,6 @@ async def get_ingredients_list():
 async def health_check():
     return {
         "status": "healthy",
-        "model": "Gemini 2.0 Flash",
         "features": ["bounding_boxes", "quantity_estimation"],
         "api_configured": model is not None,
         "timestamp": datetime.now().isoformat()
