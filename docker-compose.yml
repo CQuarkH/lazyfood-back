@@ -1,16 +1,16 @@
-version: '3.8'
-
 services:
   ml-service:
-    build: 
+    build:
       context: ./cv
       dockerfile: Dockerfile
     container_name: lazyfood-ml
     ports:
       - "8001:8001"
+    env_file:
+      - .env
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - PYTHONUNBUFFERED=1
+      - GOOGLE_API_KEY=${GOOGLE_AI_API_KEY}
     networks:
       - lazyfood-network
     restart: unless-stopped
@@ -31,10 +31,15 @@ services:
     container_name: lazyfood-backend
     ports:
       - "5000:5000"
+    env_file:
+      - .env
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - ML_SERVICE_URL=http://ml-service:8001
-      - DATABASE_URL=postgresql://user:password@db:5432/lazyfood
+      - DATABASE_URL=${DATABASE_URL}
+      - GOOGLE_API_KEY=${GOOGLE_AI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG}
     depends_on:
       ml-service:
         condition: service_healthy
@@ -47,10 +52,12 @@ services:
   db:
     image: postgres:15-alpine
     container_name: lazyfood-db
+    env_file:
+      - .env
     environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=lazyfood
+      - POSTGRES_USER=lazyfood_user
+      - POSTGRES_PASSWORD=lazyfood_pass
+      - POSTGRES_DB=lazyfood_db
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
