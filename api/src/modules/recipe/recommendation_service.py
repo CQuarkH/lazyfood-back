@@ -203,6 +203,19 @@ class RecommendationService:
             logger.warning("Gemini no devolvió pasos para receta_id=%s", receta_id)
             return []
 
+        # Helper local para conversión segura a int
+        def _safe_int(value):
+            if value is None:
+                return None
+            try:
+                return int(value)
+            except Exception:
+                try:
+                    # intentar parsear strings numéricos con espacios
+                    return int(str(value).strip())
+                except Exception:
+                    return None
+
         # Persistir pasos (reemplazando los existentes para idempotencia)
         try:
             existentes = PasoReceta.query.filter_by(receta_id=receta_id).all()
@@ -217,14 +230,21 @@ class RecommendationService:
                 n = p.get('n') or p.get('numero') or None
                 instruccion = p.get('instruccion') or p.get('instruction') or p.get('texto') or ""
                 timer = p.get('timer', None)
+
                 if n is None:
                     n = contador
                     contador += 1
+
+                # Convertir timer a entero seguro; el campo en la BD se llama temporizador_segundos
+                temporizador = _safe_int(timer)
+                if timer is not None and temporizador is None:
+                    logger.debug("Valor de timer inválido para receta_id=%s paso_n=%s: %r", receta_id, n, timer)
+
                 paso_obj = PasoReceta(
                     receta_id=receta_id,
                     numero_paso=int(n),
                     instruccion=instruccion,
-                    timer_segundos=int(timer) if timer is not None else None
+                    temporizador_segundos=temporizador
                 )
                 db.session.add(paso_obj)
 
