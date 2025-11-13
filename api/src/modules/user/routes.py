@@ -1,7 +1,9 @@
 from flask import Blueprint, jsonify, request
 from core.database import db
 from modules.user.models import Usuario
-from passlib.hash import bcrypt
+from core.auth_middleware import token_required
+from core.role_middleware import role_required, admin_required, owner_or_admin_required
+import bcrypt
 import secrets
 from datetime import datetime, timedelta
 import re
@@ -91,12 +93,22 @@ def validar_nombre(nombre):
 
 
 @user_bp.route('/v1/usuarios', methods=['GET'])
+@token_required
+@admin_required
 def listar_usuarios():
     """
-    Listar todos los usuarios (solo desarrollo)
+    Listar todos los usuarios (solo administradores)
     ---
     tags:
       - Usuarios
+    security:
+      - Bearer: []
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
     responses:
       200:
         description: Lista de usuarios
@@ -328,7 +340,7 @@ def registrar_usuario():
             }), 409
 
         # Hashear la contraseña de forma segura
-        password_hash = bcrypt.hash(password)
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
         # Crear nuevo usuario
         nuevo_usuario = Usuario(
@@ -359,13 +371,21 @@ def registrar_usuario():
 
 
 @user_bp.route('/v1/usuarios/detalle', methods=['GET'])
+@token_required
 def obtener_usuario():
     """
     Obtener información de un usuario específico por ID
     ---
     tags:
       - Usuarios
+    security:
+      - Bearer: []
     parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
       - in: query
         name: userId
         type: integer
@@ -601,4 +621,111 @@ def recuperar_password():
 
     except Exception as e:
         print(f"Error procesando recuperación de contraseña: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@user_bp.route('/v1/usuarios/<int:id>', methods=['DELETE'])
+@token_required
+def eliminar_usuario(id):
+    """
+    Eliminar un usuario (soft delete - cambiar estado a inactivo)
+    Solo el propio usuario puede eliminar su cuenta
+    ---
+    tags:
+      - Usuarios
+    security:
+      - Bearer: []
+    parameters:
+      - in: header
+        name: Authorization
+        required: true
+        type: string
+        description: Token JWT en formato "Bearer {token}"
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: ID del usuario a eliminar
+    responses:
+      200:
+        description: Usuario eliminado exitosamente
+        schema:
+          type: object
+          properties:
+            mensaje:
+              type: string
+              example: "Usuario eliminado exitosamente"
+            usuario:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  example: 1
+                nombre:
+                  type: string
+                  example: "Carlos Pérez"
+                correo:
+                  type: string
+                  example: "carlos@ejemplo.com"
+                activo:
+                  type: boolean
+                  example: false
+      404:
+        description: Usuario no encontrado
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: "Usuario no encontrado"
+      403:
+        description: No autorizado para eliminar este usuario
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: "Solo puedes eliminar tu propia cuenta"
+      500:
+        description: Error interno del servidor
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: "Error interno del servidor"
+    """
+    try:
+        # Verificar que el usuario solo pueda eliminar su propia cuenta
+        if request.current_user.id != id:
+            return jsonify({'error': 'Solo puedes eliminar tu propia cuenta'}), 403
+     
+        usuario = Usuario.query.get(id)
+        
+        if not usuario:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+       
+        if not usuario.activo:
+            return jsonify({'error': 'El usuario ya está inactivo'}), 400
+        
+        
+        usuario.activo = False
+        db.session.commit()
+        
+        print(f"✓ Usuario ID {id} marcado como inactivo por usuario ID {request.current_user.id}")
+        
+        return jsonify({
+            'mensaje': 'Usuario eliminado exitosamente',
+            'usuario': {
+                'id': usuario.id,
+                'nombre': usuario.nombre,
+                'correo': usuario.correo,
+                'activo': usuario.activo
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error eliminando usuario: {str(e)}")
         return jsonify({'error': 'Error interno del servidor'}), 500
