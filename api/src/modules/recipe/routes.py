@@ -1,8 +1,9 @@
-# api/src/modules/recipe/routes.py
 from flask import Blueprint, request, jsonify
 from modules.user.models import Usuario
 from modules.recipe.recommendation_service import recommendation_service
 import logging
+from core.auth_middleware import token_required, optional_token
+from core.role_middleware import owner_or_admin_required
 
 logger = logging.getLogger("lazyfood.recipe")
 if not logger.handlers:
@@ -14,37 +15,61 @@ logger.setLevel(logging.DEBUG)
 recipe_bp = Blueprint('recipe', __name__)
 
 
-@recipe_bp.route('/v1/recetas/sugerencias/<int:user_id>', methods=['GET'])
-def obtener_sugerencias_recetas(user_id):
+@recipe_bp.route('/v1/recetas/sugerencias', methods=['GET'])
+@token_required
+def obtener_sugerencias_recetas():
     """
-    Obtener sugerencias de recetas personalizadas
+    Obtener sugerencias de recetas personalizadas para el usuario autenticado
     ---
     tags:
       - Recetas
+    security:
+      - Bearer: []
     parameters:
-      - name: user_id
-        in: path
+      - name: cantidad
+        in: query
         type: integer
-        required: true
-        description: ID del usuario
+        required: false
+        description: Número máximo de recetas a devolver (1..20). Por defecto 5.
     responses:
       200:
         description: Lista de recetas sugeridas (sin pasos, pasos se generan on-demand)
-      404:
-        description: Usuario no encontrado o sin ingredientes
-      500:
-        description: Error interno del servidor
+        schema:
+          type: array
+          items:
+            type: object
+    400:
+      description: Parámetro inválido
+    401:
+      description: No autenticado / token inválido
+    404:
+      description: Usuario sin inventario
+    500:
+      description: Error interno del servidor
     """
     try:
-        usuario = Usuario.query.get(user_id)
-        if not usuario:
-            return jsonify({'error': 'Usuario no encontrado'}), 404
+        user = request.current_user
+        if not user:
+            return jsonify({'error': 'Usuario no autenticado'}), 401
 
         from modules.inventory.models import Inventario
-        if Inventario.query.filter_by(usuario_id=user_id).count() == 0:
+        if Inventario.query.filter_by(usuario_id=user.id).count() == 0:
             return jsonify({'error': 'El usuario no tiene ingredientes en el inventario. Escanea algunos ingredientes primero.'}), 404
 
-        recetas = recommendation_service.generar_recomendaciones(user_id)
+        # leer query param 'cantidad' (opcional)
+        cantidad_raw = request.args.get('cantidad', None)
+        if cantidad_raw is not None:
+            try:
+                cantidad = int(cantidad_raw)
+            except Exception:
+                return jsonify({'error': 'Parámetro cantidad inválido'}), 400
+        else:
+            cantidad = 5  # valor por defecto si no se pasa
+
+        if cantidad < 1 or cantidad > 20:
+            return jsonify({'error': 'cantidad debe estar entre 1 y 20'}), 400
+
+        recetas = recommendation_service.generar_recomendaciones(user.id, cantidad=cantidad)
         return jsonify(recetas), 200
 
     except Exception as e:
@@ -52,35 +77,34 @@ def obtener_sugerencias_recetas(user_id):
         return jsonify({'error': 'Error interno del servidor'}), 500
 
 
-@recipe_bp.route('/v1/recetas/sugerencias/<int:user_id>/historial', methods=['GET'])
-def obtener_historial_recomendaciones(user_id):
+@recipe_bp.route('/v1/recetas/sugerencias/historial', methods=['GET'])
+@token_required
+def obtener_historial_recomendaciones():
     """
-    Obtener historial de recomendaciones previas
+    Obtener historial de recomendaciones del usuario autenticado
     ---
     tags:
       - Recetas
-    parameters:
-      - name: user_id
-        in: path
-        type: integer
-        required: true
-        description: ID del usuario
+    security:
+      - Bearer: []
     responses:
       200:
         description: Historial de recomendaciones
-      404:
-        description: Usuario no encontrado
-      500:
-        description: Error interno del servidor
+        schema:
+          type: object
+    401:
+      description: No autenticado / token inválido
+    500:
+      description: Error interno del servidor
     """
     try:
-        usuario = Usuario.query.get(user_id)
-        if not usuario:
-            return jsonify({'error': 'Usuario no encontrado'}), 404
+        user = request.current_user
+        if not user:
+            return jsonify({'error': 'Usuario no autenticado'}), 401
 
-        historial = recommendation_service.obtener_historial_recomendaciones(user_id)
+        historial = recommendation_service.obtener_historial_recomendaciones(user.id)
         return jsonify({
-            'usuario_id': user_id,
+            'usuario_id': user.id,
             'total_recomendaciones': len(historial),
             'recomendaciones': historial
         }), 200
@@ -106,10 +130,12 @@ def obtener_detalle_receta(receta_id):
     responses:
       200:
         description: Detalle de la receta (incluye pasos si están guardados)
-      404:
-        description: Receta no encontrada
-      500:
-        description: Error interno del servidor
+        schema:
+          type: object
+    404:
+      description: Receta no encontrada
+    500:
+      description: Error interno del servidor
     """
     try:
         from modules.recipe.models import Receta, PasoReceta
@@ -136,32 +162,41 @@ def obtener_detalle_receta(receta_id):
 
 
 @recipe_bp.route('/v1/recetas/<int:receta_id>/pasos/generar', methods=['POST'])
+@token_required
 def generar_pasos_para_receta(receta_id):
     """
     Generar (on-demand) pasos detallados para una receta usando Gemini y guardar en DB.
     ---
     tags:
       - Recetas
+    security:
+      - Bearer: []
     parameters:
       - name: receta_id
         in: path
         required: true
         type: integer
         description: ID de la receta a la que generar pasos
-      - in: body
-        name: body
-        required: false
-        schema:
-          type: object
-          properties:
-            usuario_id:
-              type: integer
-              description: ID de usuario para tomar preferencias / inventario
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ingredientes:
+                type: array
+                items:
+                  type: object
+                example:
+                  - { "nombre": "Tomate", "cantidad": 2, "unidad": "unidades" }
     responses:
       200:
         description: Pasos generados y guardados
       400:
         description: Datos inválidos
+      401:
+        description: No autenticado / token inválido
       404:
         description: Receta o usuario no encontrado
       500:
@@ -169,13 +204,12 @@ def generar_pasos_para_receta(receta_id):
     """
     try:
         data = request.get_json(silent=True) or {}
-        usuario_id = data.get('usuario_id')
         ingredientes_override = data.get('ingredientes')
 
         try:
             pasos = recommendation_service.generar_y_guardar_pasos(
                 receta_id=receta_id,
-                usuario_id=usuario_id,
+                usuario_id=request.current_user.id,
                 ingredientes_override=ingredientes_override
             )
         except ValueError as ve:

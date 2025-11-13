@@ -4,26 +4,29 @@ from core.database import db
 from sqlalchemy.exc import IntegrityError
 from modules.user.models import Usuario
 from modules.inventory.models import Ingrediente, Inventario
+from core.auth_middleware import token_required
 
-# Crear Blueprint para inventario
 inventory_bp = Blueprint('inventory', __name__)
 
 
 @inventory_bp.route('/v1/ingredientes', methods=['PUT'])
+@token_required
 def actualizar_inventario():
     """
-    Actualizar inventario de usuario
+    Actualizar inventario del usuario autenticado
     ---
     tags:
       - Inventario
+    security:
+      - Bearer: []
+    description: >
+      Actualiza el inventario del usuario autenticado. Recibe un JSON con
+      una lista de ingredientes detectados. Cada elemento debe incluir al menos
+      `name` (o `id`) y `quantity`.
     parameters:
-      - name: userId
-        in: query
-        type: integer
+      - name: body
+        in: body
         required: true
-        description: ID del usuario
-      - in: body
-        name: body
         schema:
           type: object
           required:
@@ -121,14 +124,14 @@ def actualizar_inventario():
             error:
               type: string
               example: "Datos inválidos"
-      404:
-        description: Usuario no encontrado
+      401:
+        description: No autenticado / token inválido
         schema:
           type: object
           properties:
             error:
               type: string
-              example: "Usuario no encontrado"
+              example: "Token no proporcionado"
       500:
         description: Error interno del servidor
         schema:
@@ -139,20 +142,11 @@ def actualizar_inventario():
               example: "Error interno del servidor"
     """
     try:
-        # Obtener parámetros y validar userId
-        user_id_raw = request.args.get('userId')
-        if not user_id_raw:
-            return jsonify({'error': 'Se requiere el parámetro userId'}), 400
-
-        try:
-            user_id = int(user_id_raw)
-        except (ValueError, TypeError):
-            return jsonify({'error': 'userId inválido'}), 400
-
-        # Verificar que el usuario existe
-        usuario = Usuario.query.get(user_id)
-        if not usuario:
-            return jsonify({'error': 'Usuario no encontrado'}), 404
+        # Usuario autenticado desde JWT (token_required)
+        user = request.current_user
+        if not user:
+            return jsonify({'error': 'Usuario no autenticado'}), 401
+        user_id = user.id
 
         # Obtener y validar datos del body
         data = request.get_json(silent=True)
@@ -328,18 +322,21 @@ def _procesar_ingrediente(usuario_id, ingrediente_data):
 
 
 @inventory_bp.route('/v1/ingredientes', methods=['GET'])
+@token_required
 def obtener_inventario():
     """
-    Obtener inventario de usuario
+    Obtener inventario del usuario autenticado
     ---
     tags:
       - Inventario
+    security:
+      - Bearer: []
     parameters:
-      - name: userId
+      - name: detalle
         in: query
-        type: integer
-        required: true
-        description: ID del usuario
+        type: boolean
+        required: false
+        description: Si true, devuelve más detalle (reservado / no totalmente implementado)
     responses:
       200:
         description: Inventario del usuario
@@ -403,26 +400,16 @@ def obtener_inventario():
             total_ingredientes:
               type: integer
               example: 5
-      400:
-        description: Parámetro userId requerido
-      404:
-        description: Usuario no encontrado
+      401:
+        description: No autenticado / token inválido
       500:
         description: Error interno del servidor
     """
     try:
-        user_id_raw = request.args.get('userId')
-        if not user_id_raw:
-            return jsonify({'error': 'Se requiere el parámetro userId'}), 400
-
-        try:
-            user_id = int(user_id_raw)
-        except (ValueError, TypeError):
-            return jsonify({'error': 'userId inválido'}), 400
-
-        usuario = Usuario.query.get(user_id)
-        if not usuario:
-            return jsonify({'error': 'Usuario no encontrado'}), 404
+        user = request.current_user
+        if not user:
+            return jsonify({'error': 'Usuario no autenticado'}), 401
+        user_id = user.id
 
         inventario_items = Inventario.query.filter_by(usuario_id=user_id).all()
 

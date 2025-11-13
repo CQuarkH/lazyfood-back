@@ -1,195 +1,45 @@
 from flask import Blueprint, request, jsonify
-from core.database import db
 from core.auth_middleware import token_required
-from core.role_middleware import owner_or_admin_required
-from modules.user.models import Usuario
 from modules.planner.planning_service import planning_service
 from datetime import datetime, timedelta
+import logging
 
-# Crear Blueprint para planificador
+logger = logging.getLogger("lazyfood.planner.routes")
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger.addHandler(ch)
+logger.setLevel(logging.DEBUG)
+
 planner_bp = Blueprint('planner', __name__)
 
 
-@planner_bp.route('/v1/planificador/semana/<int:user_id>', methods=['PUT'])
+@planner_bp.route('/v1/planificador/semana', methods=['GET'])
 @token_required
-def crear_actualizar_planificacion(user_id):
+def obtener_planificacion_semana():
     """
-    Crear o actualizar planificación semanal
+    Obtener planificación semanal del usuario autenticado
     ---
     tags:
       - Planificador
     security:
       - Bearer: []
     parameters:
-      - in: header
-        name: Authorization
-        required: true
-        type: string
-        description: Token JWT en formato "Bearer {token}"
-      - name: user_id
-        in: path
-        type: integer
-        required: true
-        description: ID del usuario
-      - in: body
-        name: body
-        schema:
-          type: object
-          required:
-            - semana
-            - menus
-          properties:
-            semana:
-              type: string
-              format: date
-              example: "2024-01-15"
-              description: Fecha de inicio de la semana (lunes)
-            menus:
-              type: object
-              description: Menús organizados por fecha y tipo de comida
-              additionalProperties:
-                type: object
-                properties:
-                  desayuno:
-                    type: integer
-                    example: 1
-                    description: ID de la receta para desayuno
-                  almuerzo:
-                    type: integer
-                    example: 2
-                    description: ID de la receta para almuerzo
-                  cena:
-                    type: integer
-                    example: 3
-                    description: ID de la receta para cena
-    responses:
-      200:
-        description: Planificación guardada exitosamente
-        schema:
-          type: object
-          properties:
-            mensaje:
-              type: string
-              example: "Planificación semanal guardada correctamente"
-            semana:
-              type: string
-              example: "2024-01-15"
-            menus:
-              type: object
-              additionalProperties:
-                type: object
-                properties:
-                  desayuno:
-                    type: integer
-                    example: 1
-                  almuerzo:
-                    type: integer
-                    example: 2
-                  cena:
-                    type: integer
-                    example: 3
-      400:
-        description: Datos inválidos
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: "Datos inválidos"
-      404:
-        description: Usuario no encontrado
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: "Usuario no encontrado"
-      500:
-        description: Error interno del servidor
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: "Error interno del servidor"
-    """
-    try:
-        # Verificar que el usuario existe
-        usuario = Usuario.query.get(user_id)
-        if not usuario:
-            return jsonify({'error': 'Usuario no encontrado'}), 404
-
-        # Obtener datos del cuerpo
-        data = request.get_json()
-        if not data or 'semana' not in data or 'menus' not in data:
-            return jsonify({'error': 'Datos inválidos, se esperaba semana y menus'}), 400
-
-        semana = data['semana']
-        menus = data['menus']
-
-        # Validar formato de fecha
-        try:
-            datetime.strptime(semana, '%Y-%m-%d')
-        except ValueError:
-            return jsonify({'error': 'Formato de fecha inválido, use YYYY-MM-DD'}), 400
-
-        # Validar estructura de menus
-        if not isinstance(menus, dict):
-            return jsonify({'error': 'Menus debe ser un objeto JSON'}), 400
-
-        # Guardar planificación
-        planning_service.guardar_planificacion(user_id, {
-            'semana': semana,
-            'menus': menus
-        })
-
-        return jsonify({
-            'mensaje': 'Planificación semanal guardada correctamente',
-            'semana': semana,
-            'menus': menus
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error guardando planificación: {str(e)}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
-
-
-@planner_bp.route('/v1/planificador/semana/<int:user_id>', methods=['GET'])
-@token_required
-def obtener_planificacion(user_id):
-    """
-    Obtener planificación semanal
-    ---
-    tags:
-      - Planificador
-    security:
-      - Bearer: []
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        type: string
-        description: Token JWT en formato "Bearer {token}"
-      - name: user_id
-        in: path
-        type: integer
-        required: true
-        description: ID del usuario
       - name: fecha
         in: query
         type: string
         format: date
-        description: Fecha de inicio de la semana (YYYY-MM-DD). Por defecto, semana actual.
+        required: false
+        description: Fecha de inicio de la semana (YYYY-MM-DD). Si no se envía, se usa el lunes de la semana actual.
     responses:
       200:
-        description: Planificación semanal
+        description: Planificación semanal encontrada
         schema:
           type: object
           properties:
             semana:
               type: string
-              example: "2024-01-15"
+              example: "2025-11-10"
             menus:
               type: object
               additionalProperties:
@@ -200,119 +50,82 @@ def obtener_planificacion(user_id):
                     properties:
                       receta_id:
                         type: integer
+                        nullable: true
                         example: 1
                       receta_nombre:
                         type: string
+                        nullable: true
                         example: "Ensalada de Tomate"
                       es_sugerida:
                         type: boolean
-                        example: false
+                        example: true
                   almuerzo:
                     type: object
-                    properties:
-                      receta_id:
-                        type: integer
-                        example: 2
-                      receta_nombre:
-                        type: string
-                        example: "Pasta con Tomate"
-                      es_sugerida:
-                        type: boolean
-                        example: false
                   cena:
                     type: object
-                    properties:
-                      receta_id:
-                        type: integer
-                        example: 3
-                      receta_nombre:
-                        type: string
-                        example: "Huevos Revueltos"
-                      es_sugerida:
-                        type: boolean
-                        example: false
-      404:
-        description: Usuario no encontrado
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: "Usuario no encontrado"
+      400:
+        description: Fecha con formato inválido
+      401:
+        description: No autenticado / token inválido
       500:
         description: Error interno del servidor
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: "Error interno del servidor"
     """
     try:
-        # Verificar que el usuario existe
-        usuario = Usuario.query.get(user_id)
-        if not usuario:
-            return jsonify({'error': 'Usuario no encontrado'}), 404
+        user = request.current_user
+        if not user:
+            return jsonify({'error': 'Usuario no autenticado'}), 401
+        usuario_id = user.id
 
-        # Obtener parámetro de fecha (opcional, por defecto semana actual)
         fecha_inicio = request.args.get('fecha')
         if not fecha_inicio:
-            # Calcular lunes de la semana actual
             hoy = datetime.now()
             lunes = hoy - timedelta(days=hoy.weekday())
             fecha_inicio = lunes.strftime('%Y-%m-%d')
 
-        # Validar formato de fecha
         try:
             datetime.strptime(fecha_inicio, '%Y-%m-%d')
         except ValueError:
             return jsonify({'error': 'Formato de fecha inválido, use YYYY-MM-DD'}), 400
 
-        # Obtener planificación
-        planificacion = planning_service.obtener_planificacion(user_id, fecha_inicio)
-
-        return jsonify(planificacion), 200
+        plan = planning_service.obtener_planificacion(usuario_id, fecha_inicio)
+        return jsonify(plan), 200
 
     except Exception as e:
-        print(f"Error obteniendo planificación: {str(e)}")
+        logger.exception("Error en obtener_planificacion_semana: %s", e)
         return jsonify({'error': 'Error interno del servidor'}), 500
 
 
-@planner_bp.route('/v1/planificador/semana/sugerencias/<int:user_id>', methods=['GET'])
+@planner_bp.route('/v1/planificador/semana/sugerencias', methods=['POST'])
 @token_required
-def obtener_sugerencias_planificacion(user_id):
+def generar_planificacion_por_ia():
     """
-    Obtener sugerencias de planificación semanal generadas por IA
+    Generar planificación semanal por IA para el usuario autenticado
     ---
     tags:
       - Planificador
     security:
       - Bearer: []
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        type: string
-        description: Token JWT en formato "Bearer {token}"
-      - name: user_id
-        in: path
-        type: integer
-        required: true
-        description: ID del usuario
-      - name: fecha
-        in: query
-        type: string
-        format: date
-        description: Fecha de inicio de la semana (YYYY-MM-DD). Por defecto, semana actual.
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              fecha:
+                type: string
+                format: date
+                example: "2025-11-10"
+                description: Fecha de inicio de la semana (lunes). Si no se envía, se usa el lunes de la semana actual.
     responses:
       200:
-        description: Sugerencias de planificación generadas por IA
+        description: Planificación generada por IA (IDs de recetas como enteros o null)
         schema:
           type: object
           properties:
             semana:
               type: string
-              example: "2024-01-15"
+              example: "2025-11-10"
             sugerencias:
               type: object
               additionalProperties:
@@ -320,67 +133,61 @@ def obtener_sugerencias_planificacion(user_id):
                 properties:
                   desayuno:
                     type: integer
+                    nullable: true
                     example: 1
-                    description: ID de receta sugerida para desayuno
                   almuerzo:
                     type: integer
+                    nullable: true
                     example: 2
-                    description: ID de receta sugerida para almuerzo
                   cena:
                     type: integer
+                    nullable: true
                     example: 3
-                    description: ID de receta sugerida para cena
+      400:
+        description: Fecha con formato inválido o petición mal formada
+      401:
+        description: No autenticado / token inválido
       404:
-        description: Usuario no encontrado o sin ingredientes
+        description: Usuario sin recetas sugeridas (necesita generar recomendaciones primero)
         schema:
           type: object
           properties:
             error:
               type: string
-              example: "Usuario no encontrado"
       500:
         description: Error interno del servidor
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: "Error interno del servidor"
     """
     try:
-        # Verificar que el usuario existe
-        usuario = Usuario.query.get(user_id)
-        if not usuario:
-            return jsonify({'error': 'Usuario no encontrado'}), 404
+        user = request.current_user
+        if not user:
+            return jsonify({'error': 'Usuario no autenticado'}), 401
+        usuario_id = user.id
 
-        # Obtener parámetro de fecha (opcional, por defecto semana actual)
-        fecha_inicio = request.args.get('fecha')
-        if not fecha_inicio:
-            # Calcular lunes de la semana actual
+        data = request.get_json(silent=True) or {}
+        fecha = data.get('fecha') or request.args.get('fecha')
+        if not fecha:
             hoy = datetime.now()
             lunes = hoy - timedelta(days=hoy.weekday())
-            fecha_inicio = lunes.strftime('%Y-%m-%d')
+            fecha = lunes.strftime('%Y-%m-%d')
 
-        # Validar formato de fecha
         try:
-            datetime.strptime(fecha_inicio, '%Y-%m-%d')
+            datetime.strptime(fecha, '%Y-%m-%d')
         except ValueError:
             return jsonify({'error': 'Formato de fecha inválido, use YYYY-MM-DD'}), 400
 
-        # Verificar que el usuario tenga ingredientes en el inventario
-        from modules.inventory.models import Inventario
-        inventario_count = Inventario.query.filter_by(usuario_id=user_id).count()
+        result = planning_service.generar_sugerencias_planificacion(usuario_id, fecha)
 
-        if inventario_count == 0:
-            return jsonify({
-                'error': 'El usuario no tiene ingredientes en el inventario. Escanea algunos ingredientes primero.'
-            }), 404
+        if isinstance(result, dict) and result.get('error'):
+            codigo = result.get('codigo')
+            if codigo == 'no_recetas_usuario':
+                return jsonify({'error': result.get('error')}), 404
+            elif codigo == 'usuario_no_encontrado' or codigo == 'no_recetas_validas':
+                return jsonify({'error': result.get('error')}), 400
+            else:
+                return jsonify({'error': result.get('error')}), 400
 
-        # Generar sugerencias
-        sugerencias = planning_service.generar_sugerencias_planificacion(user_id, fecha_inicio)
-
-        return jsonify(sugerencias), 200
+        return jsonify(result), 200
 
     except Exception as e:
-        print(f"Error obteniendo sugerencias de planificación: {str(e)}")
+        logger.exception("Error en generar_planificacion_por_ia: %s", e)
         return jsonify({'error': 'Error interno del servidor'}), 500

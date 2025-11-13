@@ -1,4 +1,3 @@
-# api/src/modules/recipe/recommendation_service.py
 from core.database import db
 from modules.user.models import Usuario
 from modules.inventory.models import Inventario
@@ -24,12 +23,35 @@ class RecommendationService:
     # -------------------------
     # Recomendaciones (metadatos rápidos)
     # -------------------------
-    def generar_recomendaciones(self, usuario_id: int, cantidad: int = 3) -> List[Dict[str, Any]]:
+    def generar_recomendaciones(self, usuario_id: int, cantidad: int = 5) -> List[Dict[str, Any]]:
         """
         Genera recomendaciones rápidas (metadatos) usando Gemini (rápido).
         No genera pasos (para optimizar latencia); los pasos se generan bajo demanda
         usando generar_y_guardar_pasos.
+
+        Args:
+            usuario_id: ID del usuario para obtener inventario y preferencias.
+            cantidad: número máximo de recetas solicitadas al modelo (por defecto 5).
+                      Se normaliza a un entero en el rango [1, 20].
+
+        Returns:
+            Lista de diccionarios con metadata de recetas.
         """
+        # Normalizar / validar 'cantidad'
+        try:
+            if cantidad is None:
+                cantidad = 5
+            else:
+                cantidad = int(cantidad)
+        except Exception:
+            cantidad = 5
+
+        # Forzar límites razonables
+        if cantidad < 1:
+            cantidad = 1
+        if cantidad > 20:
+            cantidad = 20
+
         usuario = Usuario.query.get(usuario_id)
         if not usuario:
             raise ValueError("Usuario no encontrado")
