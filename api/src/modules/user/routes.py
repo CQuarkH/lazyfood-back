@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from core.database import db
-from modules.user.models import Usuario
+from modules.user.models import Usuario, Preferencia
 from core.auth_middleware import token_required
 from core.role_middleware import role_required, admin_required, owner_or_admin_required
 import bcrypt
@@ -50,22 +50,6 @@ def validar_password_segura(password):
     if len(password) > 128:
         return False, "La contraseña es demasiado larga (máximo 128 caracteres)"
     
-    # Debe contener al menos una letra mayúscula
-    if not re.search(r'[A-Z]', password):
-        return False, "La contraseña debe contener al menos una letra mayúscula"
-    
-    # Debe contener al menos una letra minúscula
-    if not re.search(r'[a-z]', password):
-        return False, "La contraseña debe contener al menos una letra minúscula"
-    
-    # Debe contener al menos un número
-    if not re.search(r'[0-9]', password):
-        return False, "La contraseña debe contener al menos un número"
-    
-    # Debe contener al menos un carácter especial
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/;\'`~]', password):
-        return False, "La contraseña debe contener al menos un carácter especial (!@#$%^&*...)"
-    
     return True, ""
 
 
@@ -103,12 +87,6 @@ def listar_usuarios():
       - Usuarios
     security:
       - Bearer: []
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        type: string
-        description: Token JWT en formato "Bearer {token}"
     responses:
       200:
         description: Lista de usuarios
@@ -210,20 +188,20 @@ def registrar_usuario():
           type: object
           required:
             - nombre
-            - correo
+            - email
             - password
           properties:
             nombre:
               type: string
-              example: "Carlos Pérez"
+              example: "Carlos"
               description: |
                 Nombre completo del usuario
                 - Mínimo 2 caracteres, máximo 100
                 - Solo letras, espacios y guiones
-            correo:
+            email:
               type: string
               format: email
-              example: "carlos@ejemplo.com"
+              example: "carlos@email.com"
               description: |
                 Correo electrónico único del usuario
                 - Formato válido requerido
@@ -232,7 +210,7 @@ def registrar_usuario():
             password:
               type: string
               format: password
-              example: "MiContraseña123!"
+              example: "Passw0rd"
               description: |
                 Contraseña segura del usuario
                 - Mínimo 8 caracteres, máximo 128
@@ -240,6 +218,30 @@ def registrar_usuario():
                 - Debe contener al menos una minúscula
                 - Debe contener al menos un número
                 - Debe contener al menos un carácter especial (!@#$%...)
+            pais:
+              type: string
+              example: "Chile"
+              description: País del usuario
+            preferencias:
+              type: object
+              description: Preferencias alimentarias del usuario
+              properties:
+                dieta:
+                  type: string
+                  example: "vegano"
+                  description: Tipo de dieta (vegano, vegetariano, keto, etc.)
+                alergias:
+                  type: array
+                  items:
+                    type: string
+                  example: ["maní", "gluten"]
+                  description: Lista de alergias alimentarias
+                gustos:
+                  type: array
+                  items:
+                    type: string
+                  example: ["pasta", "frutas"]
+                  description: Lista de preferencias alimentarias
     responses:
       201:
         description: Usuario registrado exitosamente
@@ -305,39 +307,38 @@ def registrar_usuario():
         data = request.get_json()
 
         if not data:
-            return jsonify({'error': 'No se enviaron datos'}), 400
+            return jsonify({'error': 'Datos inválidos'}), 400
 
-        # Obtener y limpiar campos
+        # Obtener y limpiar campos (ahora se acepta "email" en lugar de "correo")
         nombre = data.get('nombre', '').strip()
-        correo = data.get('correo', '').strip().lower()
+        correo = data.get('email', '').strip().lower()
         password = data.get('password', '')
+        pais = data.get('pais', '').strip() if data.get('pais') else None
+        preferencias_data = data.get('preferencias')
 
         # Validar que los campos no estén vacíos
         if not nombre or not correo or not password:
-            return jsonify({'error': 'El nombre, correo y contraseña son obligatorios'}), 400
+            return jsonify({'error': 'Datos inválidos'}), 400
 
         # Validar nombre
         nombre_valido, error_nombre = validar_nombre(nombre)
         if not nombre_valido:
-            return jsonify({'error': error_nombre}), 400
+            return jsonify({'error': 'Datos inválidos'}), 400
 
         # Validar formato de correo electrónico
         email_valido, error_email = validar_email(correo)
         if not email_valido:
-            return jsonify({'error': error_email}), 400
+            return jsonify({'error': 'Datos inválidos'}), 400
 
         # Validar que la contraseña sea segura
         password_valida, error_password = validar_password_segura(password)
         if not password_valida:
-            return jsonify({'error': error_password}), 400
+            return jsonify({'error': 'Datos inválidos'}), 400
 
         # Verificar duplicidad de usuario (correo ya registrado)
         usuario_existente = Usuario.query.filter_by(correo=correo).first()
         if usuario_existente:
-            return jsonify({
-                'error': 'El correo ya está registrado',
-                'detalle': 'Ya existe una cuenta con este correo electrónico'
-            }), 409
+            return jsonify({'error': 'Usuario ya registrado.'}), 409
 
         # Hashear la contraseña de forma segura
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -347,32 +348,73 @@ def registrar_usuario():
             nombre=nombre,
             correo=correo,
             password=password_hash,
+            pais=pais,
             nivel_cocina=1,  # Por defecto: principiante
             activo=True
         )
 
         # Guardar en la base de datos
         db.session.add(nuevo_usuario)
+        db.session.flush()  # Para obtener el ID del usuario antes de commit
+
+        # Crear preferencias si se proporcionaron
+        if preferencias_data and isinstance(preferencias_data, dict):
+            dieta = preferencias_data.get('dieta')
+            alergias = preferencias_data.get('alergias', [])
+            gustos = preferencias_data.get('gustos', [])
+            
+            # Validar que alergias y gustos sean listas
+            if not isinstance(alergias, list):
+                alergias = []
+            if not isinstance(gustos, list):
+                gustos = []
+            
+            nueva_preferencia = Preferencia(
+                usuario_id=nuevo_usuario.id,
+                dieta=dieta,
+                alergias=alergias,
+                gustos=gustos
+            )
+            db.session.add(nueva_preferencia)
+
         db.session.commit()
 
         print(f"✓ Usuario registrado exitosamente: {correo}")
         print(f"  Nombre: {nombre}")
         print(f"  ID: {nuevo_usuario.id}")
+        print(f"  País: {pais}")
+        if preferencias_data:
+            print(f"  Preferencias: {preferencias_data}")
 
-        return jsonify({
-            'mensaje': 'Usuario registrado exitosamente',
-            'usuario': nuevo_usuario.to_dict()
-        }), 201
+        # Preparar respuesta con solo los datos solicitados
+        response_data = {
+            'mensaje': 'Usuario creado correctamente',
+            'id': nuevo_usuario.id,
+            'nombre': nuevo_usuario.nombre,
+            'email': nuevo_usuario.correo,
+            'pais': nuevo_usuario.pais,
+            'fecha_creacion': nuevo_usuario.fecha_creacion.isoformat() if nuevo_usuario.fecha_creacion else None
+        }
+        
+        # Agregar preferencias si existen
+        if nuevo_usuario.preferencias:
+            response_data['preferencias'] = {
+                'dieta': nuevo_usuario.preferencias.dieta,
+                'alergias': nuevo_usuario.preferencias.alergias or [],
+                'gustos': nuevo_usuario.preferencias.gustos or []
+            }
+
+        return jsonify(response_data), 201
 
     except Exception as e:
         db.session.rollback()
         print(f"Error registrando usuario: {str(e)}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        return jsonify({'error': 'Ocurrió un error interno. Intente más tarde.'}), 500
 
 
-@user_bp.route('/v1/usuarios/detalle', methods=['GET'])
+@user_bp.route('/v1/usuarios/<int:id>', methods=['GET'])
 @token_required
-def obtener_usuario():
+def obtener_usuario(id):
     """
     Obtener información de un usuario específico por ID
     ---
@@ -381,13 +423,8 @@ def obtener_usuario():
     security:
       - Bearer: []
     parameters:
-      - in: header
-        name: Authorization
-        required: true
-        type: string
-        description: Token JWT en formato "Bearer {token}"
-      - in: query
-        name: userId
+      - in: path
+        name: id
         type: integer
         required: true
         description: ID del usuario a buscar
@@ -468,21 +505,8 @@ def obtener_usuario():
               example: "Error interno del servidor"
     """
     try:
-  
-        user_id = request.args.get('userId')
-        
-
-        if not user_id:
-            return jsonify({'error': 'El parámetro userId es obligatorio'}), 400
-        
-
-        try:
-            user_id = int(user_id)
-        except ValueError:
-            return jsonify({'error': 'El userId debe ser un número válido'}), 400
-        
-  
-        usuario = Usuario.query.get(user_id)
+        # El ID viene como parámetro de ruta
+        usuario = Usuario.query.get(id)
         
 
         if not usuario:
@@ -500,6 +524,165 @@ def obtener_usuario():
     except Exception as e:
         print(f"Error obteniendo usuario: {str(e)}")
         return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@user_bp.route('/v1/usuarios/preferencias', methods=['PUT'])
+@token_required
+def actualizar_preferencias():
+    """
+    Actualizar las preferencias alimentarias de un usuario
+    ---
+    tags:
+      - Usuarios
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: userId
+        type: integer
+        required: true
+        description: ID del usuario
+        example: 1
+      - in: body
+        name: body
+        required: true
+        description: Nuevas preferencias del usuario
+        schema:
+          type: object
+          properties:
+            dieta:
+              type: string
+              example: "vegano"
+              description: Tipo de dieta
+            alergias:
+              type: array
+              items:
+                type: string
+              example: ["maní", "gluten"]
+              description: Lista de alergias
+            gustos:
+              type: array
+              items:
+                type: string
+              example: ["pasta", "frutas"]
+              description: Lista de gustos alimentarios
+    responses:
+      200:
+        description: Preferencias actualizadas exitosamente
+        schema:
+          type: object
+          properties:
+            mensaje:
+              type: string
+              example: "Preferencias actualizadas exitosamente"
+            preferencias:
+              type: object
+              properties:
+                dieta:
+                  type: string
+                  example: "vegano"
+                alergias:
+                  type: array
+                  items:
+                    type: string
+                  example: ["maní", "gluten"]
+                gustos:
+                  type: array
+                  items:
+                    type: string
+                  example: ["pasta", "frutas"]
+      400:
+        description: Datos inválidos
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: "Datos inválidos"
+      404:
+        description: Usuario no encontrado
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: "Usuario no encontrado"
+      500:
+        description: Error interno del servidor
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: "Ocurrió un error interno. Intente más tarde."
+    """
+    try:
+        user_id = request.args.get('userId')
+        
+        if not user_id:
+            return jsonify({'error': 'Datos inválidos'}), 400
+        
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Datos inválidos'}), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Datos inválidos'}), 400
+        
+        usuario = Usuario.query.get(user_id)
+        
+        if not usuario:
+            return jsonify({'error': 'Usuario no encontrado'}), 404
+        
+        # Obtener datos de preferencias
+        dieta = data.get('dieta')
+        alergias = data.get('alergias', [])
+        gustos = data.get('gustos', [])
+        
+        # Validar que alergias y gustos sean listas
+        if not isinstance(alergias, list):
+            alergias = []
+        if not isinstance(gustos, list):
+            gustos = []
+        
+        # Verificar si el usuario ya tiene preferencias
+        if usuario.preferencias:
+            # Actualizar preferencias existentes
+            usuario.preferencias.dieta = dieta
+            usuario.preferencias.alergias = alergias
+            usuario.preferencias.gustos = gustos
+        else:
+            # Crear nuevas preferencias
+            nueva_preferencia = Preferencia(
+                usuario_id=usuario.id,
+                dieta=dieta,
+                alergias=alergias,
+                gustos=gustos
+            )
+            db.session.add(nueva_preferencia)
+        
+        db.session.commit()
+        
+        print(f"✓ Preferencias actualizadas para usuario ID: {user_id}")
+        print(f"  Dieta: {dieta}")
+        print(f"  Alergias: {alergias}")
+        print(f"  Gustos: {gustos}")
+        
+        return jsonify({
+            'mensaje': 'Preferencias actualizadas exitosamente',
+            'preferencias': {
+                'dieta': dieta,
+                'alergias': alergias,
+                'gustos': gustos
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error actualizando preferencias: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error interno. Intente más tarde.'}), 500
 
 
 @user_bp.route('/v1/usuarios/recuperar-password', methods=['POST'])
@@ -612,7 +795,7 @@ def recuperar_password():
 
         return jsonify({
             'mensaje': 'Enlace de recuperación generado exitosamente',
-            'correo': correo_enmascarado,
+            'email': correo_enmascarado,
            
             'link_recuperacion': link_recuperacion,
             'token': token,
@@ -636,11 +819,6 @@ def eliminar_usuario(id):
     security:
       - Bearer: []
     parameters:
-      - in: header
-        name: Authorization
-        required: true
-        type: string
-        description: Token JWT en formato "Bearer {token}"
       - in: path
         name: id
         required: true
@@ -720,7 +898,7 @@ def eliminar_usuario(id):
             'usuario': {
                 'id': usuario.id,
                 'nombre': usuario.nombre,
-                'correo': usuario.correo,
+                'email': usuario.correo,
                 'activo': usuario.activo
             }
         }), 200

@@ -8,6 +8,7 @@ import sys
 
 from core.config import Config
 from core.database import init_db
+from core.error_handler import register_error_handlers, register_api_exception_handler
 
 # Importar blueprints
 from modules.inventory.routes import inventory_bp
@@ -15,6 +16,7 @@ from modules.user.routes import user_bp
 from modules.recipe.routes import recipe_bp
 from modules.planner.routes import planner_bp
 from modules.auth.routes import auth_bp
+from modules.test_routes import test_bp
 
 
 def create_app():
@@ -81,6 +83,11 @@ def create_app():
         print(f"Error inicializando la aplicación: {e}")
         return None
 
+    # Registrar manejadores de error globales
+    register_error_handlers(app)
+    register_api_exception_handler(app)
+    print("✓ Manejadores de error registrados")
+    
     # Registrar blueprints
     app.register_blueprint(auth_bp)  # Blueprint de autenticación primero
     app.register_blueprint(inventory_bp)

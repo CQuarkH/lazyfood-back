@@ -28,7 +28,7 @@ class Usuario(db.Model):
         data = {
             'id': self.id,
             'nombre': self.nombre,
-            'correo': self.correo,
+            'email': self.correo,
             'rol': self.rol,
             'pais': self.pais,
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,

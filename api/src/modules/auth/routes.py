@@ -58,16 +58,16 @@ def login():
         schema:
           type: object
           required:
-            - correo
+            - email
             - password
           properties:
-            correo:
+            email:
               type: string
-              example: "usuario@ejemplo.com"
+              example: "carlos@email.com"
               description: Correo electrónico del usuario
             password:
               type: string
-              example: "Password123!"
+              example: "Passw0rd"
               description: Contraseña del usuario
     responses:
       200:
@@ -116,11 +116,11 @@ def login():
         if not data:
             return jsonify({'error': 'No se proporcionaron datos'}), 400
 
-        correo = data.get('correo', '').strip()
+        correo = data.get('email', '').strip().lower()
         password = data.get('password', '')
 
         if not correo or not password:
-            return jsonify({'error': 'Correo y contraseña son requeridos'}), 400
+            return jsonify({'error': 'Email y contraseña son requeridos'}), 400
 
         # Buscar usuario por correo
         usuario = Usuario.query.filter_by(correo=correo).first()
@@ -167,7 +167,7 @@ def login():
             'user': {
                 'id': usuario.id,
                 'nombre': usuario.nombre,
-                'correo': usuario.correo,
+                'email': usuario.correo,
                 'rol': usuario.rol
             }
         }), 200
@@ -191,45 +191,23 @@ def logout():
       - Autenticación
     security:
       - Bearer: []
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        type: string
-        description: Token JWT en formato "Bearer {token}"
-      - in: body
-        name: body
-        schema:
-          type: object
-          properties:
-            refresh_token:
-              type: string
-              description: Token de refresco a invalidar
     responses:
       200:
         description: Cierre de sesión exitoso
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+              example: "Cierre de sesión exitoso"
       401:
         description: No autenticado
       500:
         description: Error interno del servidor
     """
     try:
-        data = request.get_json(silent=True) or {}
-        refresh_token = data.get('refresh_token')
-
-        # Eliminar el refresh token si se proporcionó
-        if refresh_token:
-            token_db = Token.query.filter_by(
-                usuario_id=request.current_user.id,
-                jwt=refresh_token
-            ).first()
-
-            if token_db:
-                db.session.delete(token_db)
-
-        # Opción: eliminar todos los tokens del usuario
-        # Token.query.filter_by(usuario_id=request.current_user.id).delete()
-
+        # Eliminar todos los tokens del usuario
+        Token.query.filter_by(usuario_id=request.current_user.id).delete()
         db.session.commit()
 
         return jsonify({
@@ -342,53 +320,5 @@ def refresh():
         print(f"Error en refresh: {str(e)}")
         return jsonify({
             'error': 'Error interno del servidor',
-            'message': str(e)
-        }), 500
-
-
-@auth_bp.route('/v1/auth/me', methods=['GET'])
-@token_required
-def get_current_user():
-    """
-    Obtener información del usuario actual
-    ---
-    tags:
-      - Autenticación
-    security:
-      - Bearer: []
-    parameters:
-      - in: header
-        name: Authorization
-        required: true
-        type: string
-        description: Token JWT en formato "Bearer {token}"
-    responses:
-      200:
-        description: Información del usuario
-        schema:
-          type: object
-          properties:
-            id:
-              type: integer
-            nombre:
-              type: string
-            correo:
-              type: string
-            rol:
-              type: string
-            pais:
-              type: string
-            nivel_cocina:
-              type: integer
-            activo:
-              type: boolean
-      401:
-        description: No autenticado
-    """
-    try:
-        return jsonify(request.current_user.to_dict()), 200
-    except Exception as e:
-        return jsonify({
-            'error': 'Error obteniendo información del usuario',
             'message': str(e)
         }), 500
