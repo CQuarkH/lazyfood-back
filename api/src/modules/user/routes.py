@@ -116,6 +116,33 @@ def validar_metas_nutricionales(meta):
     return True, ""
 
 
+def validar_alergias(alergias):
+    """
+    Valida que las alergias sean de las permitidas
+    Returns: (bool, str, list) - (es_valido, mensaje_error, alergias_invalidas)
+    """
+    alergias_permitidas = [
+        "gluten",
+        "lacteos",
+        "frutos secos",
+        "mariscos",
+        "huevo",
+        "soja"
+    ]
+    
+    if not isinstance(alergias, list):
+        return False, "Las alergias deben ser una lista", []
+    
+    # Normalizar alergias a minúsculas para comparación
+    alergias_normalizadas = [alergia.strip().lower() for alergia in alergias]
+    alergias_invalidas = [alergia for alergia in alergias_normalizadas if alergia not in alergias_permitidas]
+    
+    if alergias_invalidas:
+        return False, f"Alergias no válidas: {', '.join(alergias_invalidas)}. Opciones permitidas: {', '.join(alergias_permitidas)}", alergias_invalidas
+    
+    return True, "", []
+
+
 @user_bp.route('/v1/usuarios', methods=['GET'])
 @token_required
 @admin_required
@@ -291,14 +318,16 @@ def registrar_usuario():
                   type: array
                   items:
                     type: string
-                  example: ["maní", "gluten"]
-                  description: Lista de alergias alimentarias (opcional)
+                  example: ["gluten", "lacteos"]
+                  description: |
+                    Lista de alergias alimentarias (opcional)
+                    Alergias permitidas: gluten, lacteos, frutos secos, mariscos, huevo, soja
                 gustos:
                   type: array
                   items:
                     type: string
                   example: ["pasta", "frutas"]
-                  description: Lista de preferencias alimentarias
+                  description: Lista de preferencias alimentarias (opcional)
     responses:
       201:
         description: Usuario registrado exitosamente
@@ -430,27 +459,35 @@ def registrar_usuario():
         db.session.add(nuevo_usuario)
         db.session.flush()  # Para obtener el ID del usuario antes de commit
 
-        # Crear preferencias (dieta y gustos son obligatorios, alergias opcional)
+        # Crear preferencias (solo dieta es obligatoria, gustos y alergias son opcionales)
         if preferencias_data and isinstance(preferencias_data, dict):
             dieta = preferencias_data.get('dieta')
-            gustos = preferencias_data.get('gustos', [])
+            gustos = preferencias_data.get('gustos', [])  # Gustos es opcional
             alergias = preferencias_data.get('alergias', [])  # Alergias es opcional
             
-            # Validar que dieta y gustos estén presentes
-            if not dieta or not gustos:
+            # Validar que dieta esté presente
+            if not dieta:
                 return jsonify({'error': 'Datos inválidos'}), 400
             
-            # Validar que gustos y alergias sean listas
-            if not isinstance(gustos, list):
+            # Validar que gustos sea una lista (si se proporciona)
+            if gustos and not isinstance(gustos, list):
                 return jsonify({'error': 'Datos inválidos'}), 400
-            if not isinstance(alergias, list):
-                alergias = []
+            
+            # Validar alergias (si se proporcionan)
+            if alergias:
+                if not isinstance(alergias, list):
+                    return jsonify({'error': 'Datos inválidos'}), 400
+                
+                # Validar que las alergias sean de las permitidas
+                alergias_validas, error_alergias, alergias_invalidas = validar_alergias(alergias)
+                if not alergias_validas:
+                    return jsonify({'error': error_alergias}), 400
             
             nueva_preferencia = Preferencia(
                 usuario_id=nuevo_usuario.id,
                 dieta=dieta,
-                alergias=alergias,
-                gustos=gustos
+                alergias=alergias if alergias else [],
+                gustos=gustos if gustos else []
             )
             db.session.add(nueva_preferencia)
         else:
