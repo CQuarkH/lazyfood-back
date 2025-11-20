@@ -1,8 +1,9 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, render_template_string
 from core.database import db
 from modules.user.models import Usuario, Preferencia
 from core.auth_middleware import token_required
 from core.role_middleware import role_required, admin_required, owner_or_admin_required
+from core.email_service import EmailService
 import bcrypt
 import secrets
 from datetime import datetime, timedelta
@@ -688,17 +689,25 @@ def actualizar_preferencias():
 @user_bp.route('/v1/usuarios/recuperar-password', methods=['POST'])
 def recuperar_password():
     """
-    Solicitar recuperación de contraseña por ID de usuario
+    Solicitar recuperación de contraseña por email
     ---
     tags:
       - Usuarios
     parameters:
-      - in: query
-        name: userId
-        type: integer
+      - in: body
+        name: body
         required: true
-        description: ID del usuario que solicita recuperar contraseña
-        example: 1
+        description: Email del usuario
+        schema:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+              format: email
+              example: "usuario@ejemplo.com"
+              description: Email del usuario que solicita recuperar contraseña
     responses:
       200:
         description: Solicitud de recuperación procesada exitosamente
@@ -707,40 +716,19 @@ def recuperar_password():
           properties:
             mensaje:
               type: string
-              example: "Enlace de recuperación generado exitosamente"
-            link_recuperacion:
-              type: string
-              example: "http://localhost:5000/reset-password?token=abc123xyz456..."
-              description: Link de recuperación (solo en desarrollo)
-            token:
-              type: string
-              example: "abc123xyz456def789..."
-              description: Token de recuperación (solo en desarrollo)
-            expiracion:
-              type: string
-              format: date-time
-              example: "2025-10-23T13:30:45"
-              description: Fecha de expiración del token (1 hora)
+              example: "Si el correo existe, recibirás un enlace de recuperación"
             correo:
               type: string
-              example: "car***@ejemplo.com"
-              description: Correo enmascarado donde se envió el link
+              example: "usu***@ejemplo.com"
+              description: Correo enmascarado (solo si el usuario existe)
       400:
-        description: Parámetro userId faltante o inválido
+        description: Email faltante o inválido
         schema:
           type: object
           properties:
             error:
               type: string
-              example: "El parámetro userId es obligatorio"
-      404:
-        description: Usuario no encontrado
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: "Usuario no encontrado"
+              example: "El email es obligatorio"
       500:
         description: Error interno del servidor
         schema:
@@ -751,58 +739,69 @@ def recuperar_password():
               example: "Error interno del servidor"
     """
     try:
-      
-        user_id = request.args.get('userId')
+        data = request.get_json()
         
-      
-        if not user_id:
-            return jsonify({'error': 'El parámetro userId es obligatorio'}), 400
-
-        try:
-            user_id = int(user_id)
-        except ValueError:
-            return jsonify({'error': 'El userId debe ser un número válido'}), 400
+        if not data:
+            return jsonify({'error': 'Datos inválidos'}), 400
         
-      
-        usuario = Usuario.query.get(user_id)
+        email = data.get('email', '').strip().lower()
         
-  
+        if not email:
+            return jsonify({'error': 'El email es obligatorio'}), 400
+        
+        # Validar formato de email
+        email_valido, error_email = validar_email(email)
+        if not email_valido:
+            return jsonify({'error': 'Formato de email inválido'}), 400
+        
+        # Buscar usuario por email
+        usuario = Usuario.query.filter_by(correo=email).first()
+        
+        # Por seguridad, siempre retornamos el mismo mensaje (para no revelar si el email existe)
         if not usuario:
-            return jsonify({'error': 'Usuario no encontrado'}), 404
-
-       
+            return jsonify({
+                'mensaje': 'Si el correo existe, recibirás un enlace de recuperación'
+            }), 200
+        
+        # Generar token de recuperación
         token = secrets.token_urlsafe(32)
         expiracion = datetime.utcnow() + timedelta(hours=1)
-
-    
+        
+        # Guardar token en la base de datos
+        usuario.reset_token = token
+        usuario.reset_token_expiration = expiracion
+        db.session.commit()
+        
+        # Construir link de recuperación
         link_recuperacion = f"http://localhost:5000/reset-password?token={token}"
-
-      
-        correo = usuario.correo
-        partes = correo.split('@')
+        
+        # Enviar email
+        email_enviado, mensaje = EmailService.send_password_reset_email(
+            to_email=usuario.correo,
+            reset_link=link_recuperacion,
+            user_name=usuario.nombre
+        )
+        
+        # Enmascarar email para la respuesta
+        partes = usuario.correo.split('@')
         if len(partes[0]) > 3:
             correo_enmascarado = f"{partes[0][:3]}***@{partes[1]}"
         else:
             correo_enmascarado = f"{partes[0][0]}***@{partes[1]}"
-
         
-        print(f"✓ Token de recuperación generado para usuario ID: {user_id}")
-        print(f"  Correo: {correo}")
+        print(f"✓ Token de recuperación generado para: {usuario.correo}")
+        print(f"  Usuario: {usuario.nombre}")
         print(f"  Link: {link_recuperacion}")
         print(f"  Expira: {expiracion}")
-
-        # TODO: 
-
+        print(f"  Email enviado: {email_enviado}")
+        
         return jsonify({
-            'mensaje': 'Enlace de recuperación generado exitosamente',
-            'email': correo_enmascarado,
-           
-            'link_recuperacion': link_recuperacion,
-            'token': token,
-            'expiracion': expiracion.isoformat()
+            'mensaje': 'Si el correo existe, recibirás un enlace de recuperación',
+            'correo': correo_enmascarado
         }), 200
-
+        
     except Exception as e:
+        db.session.rollback()
         print(f"Error procesando recuperación de contraseña: {str(e)}")
         return jsonify({'error': 'Error interno del servidor'}), 500
 
@@ -906,4 +905,499 @@ def eliminar_usuario(id):
     except Exception as e:
         db.session.rollback()
         print(f"Error eliminando usuario: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@user_bp.route('/reset-password', methods=['GET'])
+def reset_password_page():
+    """
+    Página HTML para restablecer contraseña
+    ---
+    tags:
+      - Usuarios
+    parameters:
+      - in: query
+        name: token
+        type: string
+        required: true
+        description: Token de recuperación de contraseña
+    responses:
+      200:
+        description: Página HTML para restablecer contraseña
+        content:
+          text/html:
+            schema:
+              type: string
+    """
+    token = request.args.get('token', '')
+    
+    html_template = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restablecer Contraseña - LazyFood</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 450px;
+            width: 100%;
+            padding: 40px;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .password-requirements {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 12px;
+        }
+        
+        .password-requirements h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        
+        .requirement {
+            color: #666;
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .requirement::before {
+            content: "•";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .alert {
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .success-message {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .success-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🍽️</div>
+            <h1>Restablecer Contraseña</h1>
+            <p class="subtitle">Ingresa tu nueva contraseña</p>
+        </div>
+        
+        <div id="alert" class="alert"></div>
+        
+        <form id="resetForm">
+            <div class="form-group">
+                <label for="password">Nueva Contraseña</label>
+                <input 
+                    type="password" 
+                    id="password" 
+                    name="password" 
+                    placeholder="Ingresa tu nueva contraseña"
+                    required
+                >
+            </div>
+            
+            <div class="form-group">
+                <label for="confirmPassword">Confirmar Contraseña</label>
+                <input 
+                    type="password" 
+                    id="confirmPassword" 
+                    name="confirmPassword" 
+                    placeholder="Confirma tu nueva contraseña"
+                    required
+                >
+            </div>
+            
+            <div class="password-requirements">
+                <h4>La contraseña debe cumplir:</h4>
+                <div class="requirement">Mínimo 8 caracteres</div>
+                <div class="requirement">Máximo 128 caracteres</div>
+            </div>
+            
+            <button type="submit" id="submitBtn">Restablecer Contraseña</button>
+        </form>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px; color: #666;">Procesando...</p>
+        </div>
+        
+        <div class="success-message" id="successMessage">
+            <div class="success-icon">✅</div>
+            <h2>¡Contraseña Actualizada!</h2>
+            <p style="color: #666; margin-top: 10px;">Tu contraseña ha sido cambiada exitosamente.</p>
+            <p style="color: #666; margin-top: 5px;">Ya puedes cerrar esta página.</p>
+        </div>
+    </div>
+    
+    <script>
+        const token = '{{ token }}';
+        const form = document.getElementById('resetForm');
+        const alertDiv = document.getElementById('alert');
+        const loading = document.getElementById('loading');
+        const successMessage = document.getElementById('successMessage');
+        const submitBtn = document.getElementById('submitBtn');
+        
+        function showAlert(message, type) {
+            alertDiv.textContent = message;
+            alertDiv.className = 'alert alert-' + type;
+            alertDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        function validatePassword(password) {
+            if (password.length < 8) {
+                return 'La contraseña debe tener al menos 8 caracteres';
+            }
+            if (password.length > 128) {
+                return 'La contraseña no debe exceder 128 caracteres';
+            }
+            return null;
+        }
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            // Validaciones
+            if (!password || !confirmPassword) {
+                showAlert('Por favor completa todos los campos', 'error');
+                return;
+            }
+            
+            const passwordError = validatePassword(password);
+            if (passwordError) {
+                showAlert(passwordError, 'error');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                showAlert('Las contraseñas no coinciden', 'error');
+                return;
+            }
+            
+            // Mostrar loading
+            form.style.display = 'none';
+            loading.style.display = 'block';
+            submitBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/v1/usuarios/cambiar-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        token: token,
+                        new_password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Mostrar mensaje de éxito
+                    loading.style.display = 'none';
+                    successMessage.style.display = 'block';
+                } else {
+                    throw new Error(data.error || 'Error al cambiar la contraseña');
+                }
+                
+            } catch (error) {
+                loading.style.display = 'none';
+                form.style.display = 'block';
+                submitBtn.disabled = false;
+                showAlert(error.message, 'error');
+            }
+        });
+    </script>
+</body>
+</html>
+    """
+    
+    return render_template_string(html_template, token=token)
+
+
+@user_bp.route('/v1/usuarios/cambiar-password', methods=['POST'])
+def cambiar_password():
+    """
+    Cambiar contraseña usando token de recuperación
+    ---
+    tags:
+      - Usuarios
+    parameters:
+      - in: body
+        name: body
+        required: true
+        description: Token y nueva contraseña
+        schema:
+          type: object
+          required:
+            - token
+            - new_password
+          properties:
+            token:
+              type: string
+              example: "abc123xyz456def789..."
+              description: Token de recuperación recibido por email
+            new_password:
+              type: string
+              format: password
+              example: "NuevaPassword123"
+              description: Nueva contraseña (mínimo 8 caracteres)
+    responses:
+      200:
+        description: Contraseña cambiada exitosamente
+        schema:
+          type: object
+          properties:
+            mensaje:
+              type: string
+              example: "Contraseña actualizada exitosamente"
+      400:
+        description: Datos inválidos o token expirado
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: "Token inválido o expirado"
+      404:
+        description: Token no encontrado
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: "Token no válido"
+      500:
+        description: Error interno del servidor
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+              example: "Error interno del servidor"
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos inválidos'}), 400
+        
+        token = data.get('token', '').strip()
+        new_password = data.get('new_password', '')
+        
+        if not token or not new_password:
+            return jsonify({'error': 'Token y contraseña son obligatorios'}), 400
+        
+        # Validar nueva contraseña
+        password_valida, error_password = validar_password_segura(new_password)
+        if not password_valida:
+            return jsonify({'error': error_password}), 400
+        
+        # Buscar usuario por token
+        usuario = Usuario.query.filter_by(reset_token=token).first()
+        
+        if not usuario:
+            return jsonify({'error': 'Token no válido'}), 404
+        
+        # Verificar que el token no haya expirado
+        if not usuario.reset_token_expiration or datetime.utcnow() > usuario.reset_token_expiration:
+            return jsonify({'error': 'Token inválido o expirado'}), 400
+        
+        # Hashear la nueva contraseña
+        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        # Actualizar contraseña y limpiar token
+        usuario.password = password_hash
+        usuario.reset_token = None
+        usuario.reset_token_expiration = None
+        db.session.commit()
+        
+        # Enviar email de confirmación
+        EmailService.send_password_changed_confirmation(
+            to_email=usuario.correo,
+            user_name=usuario.nombre
+        )
+        
+        print(f"✓ Contraseña actualizada para usuario: {usuario.correo}")
+        
+        return jsonify({
+            'mensaje': 'Contraseña actualizada exitosamente'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error cambiando contraseña: {str(e)}")
         return jsonify({'error': 'Error interno del servidor'}), 500

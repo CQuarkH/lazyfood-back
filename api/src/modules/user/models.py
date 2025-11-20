@@ -15,6 +15,8 @@ class Usuario(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     nivel_cocina = db.Column(db.Integer, default=1)  # 1: principiante, 2: intermedio, 3: avanzado
     activo = db.Column(db.Boolean, default=True)
+    reset_token = db.Column(db.String(255), nullable=True)
+    reset_token_expiration = db.Column(db.DateTime, nullable=True)
 
     # Relaciones
     preferencias = db.relationship('Preferencia', backref='usuario', uselist=False, cascade='all, delete-orphan')
