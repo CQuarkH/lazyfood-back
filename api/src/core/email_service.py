@@ -49,11 +49,25 @@ class EmailService:
                         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                     }}
                     .header {{
-                        background-color: #4CAF50;
+                        background-color: #A96224;
                         color: white;
-                        padding: 20px;
+                        padding: 30px 20px;
                         border-radius: 10px 10px 0 0;
                         text-align: center;
+                    }}
+                    .logo {{
+                        width: 80px;
+                        height: 80px;
+                        margin: 0 auto 15px;
+                        background-color: #A96224;
+                        border-radius: 50%;
+                        display: table;
+                        text-align: center;
+                        font-size: 36px;
+                        font-weight: bold;
+                        color: white;
+                        border: 3px solid white;
+                        line-height: 76px;
                     }}
                     .content {{
                         background-color: white;
@@ -62,13 +76,16 @@ class EmailService:
                     }}
                     .button {{
                         display: inline-block;
-                        background-color: #4CAF50;
+                        background-color: #A96224;
                         color: white !important;
                         padding: 15px 30px;
                         text-decoration: none;
                         border-radius: 5px;
                         margin: 20px 0;
                         font-weight: bold;
+                    }}
+                    .button:hover {{
+                        background-color: #8B4E1C;
                     }}
                     .footer {{
                         text-align: center;
@@ -78,7 +95,7 @@ class EmailService:
                     }}
                     .warning {{
                         background-color: #fff3cd;
-                        border-left: 4px solid #ffc107;
+                        border-left: 4px solid #A96224;
                         padding: 10px;
                         margin: 15px 0;
                     }}
@@ -87,7 +104,8 @@ class EmailService:
             <body>
                 <div class="container">
                     <div class="header">
-                        <h1>🍽️ LazyFood</h1>
+                        <div class="logo">LF</div>
+                        <h1>LazyFood</h1>
                     </div>
                     <div class="content">
                         <h2>Hola {user_name},</h2>
@@ -188,11 +206,25 @@ class EmailService:
                         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                     }}
                     .header {{
-                        background-color: #4CAF50;
+                        background-color: #A96224;
                         color: white;
-                        padding: 20px;
+                        padding: 30px 20px;
                         border-radius: 10px 10px 0 0;
                         text-align: center;
+                    }}
+                    .logo {{
+                        width: 80px;
+                        height: 80px;
+                        margin: 0 auto 15px;
+                        background-color: #A96224;
+                        border-radius: 50%;
+                        display: table;
+                        text-align: center;
+                        font-size: 36px;
+                        font-weight: bold;
+                        color: white;
+                        border: 3px solid white;
+                        line-height: 76px;
                     }}
                     .content {{
                         background-color: white;
@@ -200,8 +232,8 @@ class EmailService:
                         border-radius: 0 0 10px 10px;
                     }}
                     .success {{
-                        background-color: #d4edda;
-                        border-left: 4px solid #28a745;
+                        background-color: #fef3e8;
+                        border-left: 4px solid #A96224;
                         padding: 15px;
                         margin: 15px 0;
                     }}
@@ -216,7 +248,8 @@ class EmailService:
             <body>
                 <div class="container">
                     <div class="header">
-                        <h1>🍽️ LazyFood</h1>
+                        <div class="logo">LF</div>
+                        <h1>LazyFood</h1>
                     </div>
                     <div class="content">
                         <h2>Hola {user_name},</h2>

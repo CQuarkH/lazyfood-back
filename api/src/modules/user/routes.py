@@ -1067,7 +1067,7 @@ def reset_password_page():
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #A96224 0%, #8B4E1C 100%);
             min-height: 100vh;
             display: flex;
             justify-content: center;
@@ -1102,8 +1102,17 @@ def reset_password_page():
         }
         
         .logo {
-            font-size: 48px;
-            margin-bottom: 10px;
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px;
+            background-color: #A96224;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: bold;
+            color: white;
         }
         
         h1 {
@@ -1140,8 +1149,8 @@ def reset_password_page():
         
         input[type="password"]:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: #A96224;
+            box-shadow: 0 0 0 3px rgba(169, 98, 36, 0.1);
         }
         
         .password-requirements {
@@ -1167,7 +1176,7 @@ def reset_password_page():
         
         .requirement::before {
             content: "•";
-            color: #667eea;
+            color: #A96224;
             font-weight: bold;
             margin-right: 8px;
         }
@@ -1175,7 +1184,7 @@ def reset_password_page():
         button {
             width: 100%;
             padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #A96224 0%, #8B4E1C 100%);
             color: white;
             border: none;
             border-radius: 10px;
@@ -1188,7 +1197,7 @@ def reset_password_page():
         
         button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 10px 20px rgba(169, 98, 36, 0.3);
         }
         
         button:active {
@@ -1235,7 +1244,7 @@ def reset_password_page():
         
         .spinner {
             border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
+            border-top: 3px solid #A96224;
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -1263,7 +1272,7 @@ def reset_password_page():
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">🍽️</div>
+            <div class="logo">LF</div>
             <h1>Restablecer Contraseña</h1>
             <p class="subtitle">Ingresa tu nueva contraseña</p>
         </div>
