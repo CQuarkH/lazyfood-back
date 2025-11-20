@@ -77,6 +77,45 @@ def validar_nombre(nombre):
     return True, ""
 
 
+def validar_nivel_cocina(nivel):
+    """
+    Valida el nivel de cocina del usuario
+    Returns: (bool, str) - (es_valido, mensaje_error)
+    """
+    if nivel is None:
+        return False, "El nivel de cocina es obligatorio"
+    
+    try:
+        nivel_int = int(nivel)
+        if nivel_int not in [1, 2, 3]:
+            return False, "El nivel de cocina debe ser 1, 2 o 3"
+        return True, ""
+    except (ValueError, TypeError):
+        return False, "El nivel de cocina debe ser un número entero"
+
+
+def validar_metas_nutricionales(meta):
+    """
+    Valida las metas nutricionales del usuario
+    Returns: (bool, str) - (es_valido, mensaje_error)
+    """
+    if not meta:
+        return False, "Las metas nutricionales son obligatorias"
+    
+    metas_permitidas = [
+        "Bajar de peso",
+        "Mantener salud general",
+        "Aumentar masa muscular",
+        "Mejorar energía",
+        "Cocinar más en casa"
+    ]
+    
+    if meta not in metas_permitidas:
+        return False, f"Meta nutricional no válida. Opciones: {', '.join(metas_permitidas)}"
+    
+    return True, ""
+
+
 @user_bp.route('/v1/usuarios', methods=['GET'])
 @token_required
 @admin_required
@@ -191,6 +230,9 @@ def registrar_usuario():
             - nombre
             - email
             - password
+            - nivel_cocina
+            - metas_nutricionales
+            - pais
           properties:
             nombre:
               type: string
@@ -219,6 +261,20 @@ def registrar_usuario():
                 - Debe contener al menos una minúscula
                 - Debe contener al menos un número
                 - Debe contener al menos un carácter especial (!@#$%...)
+            nivel_cocina:
+              type: string
+              example: "1"
+              description: Nivel de cocina (1=principiante, 2=intermedio, 3=avanzado)
+            metas_nutricionales:
+              type: string
+              example: "Bajar de peso"
+              description: |
+                Metas nutricionales del usuario. Opciones permitidas:
+                - Bajar de peso
+                - Mantener salud general
+                - Aumentar masa muscular
+                - Mejorar energía
+                - Cocinar más en casa
             pais:
               type: string
               example: "Chile"
@@ -236,7 +292,7 @@ def registrar_usuario():
                   items:
                     type: string
                   example: ["maní", "gluten"]
-                  description: Lista de alergias alimentarias
+                  description: Lista de alergias alimentarias (opcional)
                 gustos:
                   type: array
                   items:
@@ -314,11 +370,16 @@ def registrar_usuario():
         nombre = data.get('nombre', '').strip()
         correo = data.get('email', '').strip().lower()
         password = data.get('password', '')
+        nivel_cocina = data.get('nivel_cocina')
+        metas_nutricionales = data.get('metas_nutricionales', '').strip()
         pais = data.get('pais', '').strip() if data.get('pais') else None
         preferencias_data = data.get('preferencias')
 
-        # Validar que los campos no estén vacíos
-        if not nombre or not correo or not password:
+        # Validar que los campos obligatorios no estén vacíos
+        if not nombre or not correo or not password or not pais:
+            return jsonify({'error': 'Datos inválidos'}), 400
+        
+        if nivel_cocina is None or not metas_nutricionales:
             return jsonify({'error': 'Datos inválidos'}), 400
 
         # Validar nombre
@@ -335,6 +396,16 @@ def registrar_usuario():
         password_valida, error_password = validar_password_segura(password)
         if not password_valida:
             return jsonify({'error': 'Datos inválidos'}), 400
+        
+        # Validar nivel de cocina
+        nivel_valido, error_nivel = validar_nivel_cocina(nivel_cocina)
+        if not nivel_valido:
+            return jsonify({'error': 'Datos inválidos'}), 400
+        
+        # Validar metas nutricionales
+        metas_validas, error_metas = validar_metas_nutricionales(metas_nutricionales)
+        if not metas_validas:
+            return jsonify({'error': 'Datos inválidos'}), 400
 
         # Verificar duplicidad de usuario (correo ya registrado)
         usuario_existente = Usuario.query.filter_by(correo=correo).first()
@@ -350,7 +421,8 @@ def registrar_usuario():
             correo=correo,
             password=password_hash,
             pais=pais,
-            nivel_cocina=1,  # Por defecto: principiante
+            nivel_cocina=int(nivel_cocina),
+            metas_nutricionales=metas_nutricionales,
             activo=True
         )
 
@@ -358,17 +430,21 @@ def registrar_usuario():
         db.session.add(nuevo_usuario)
         db.session.flush()  # Para obtener el ID del usuario antes de commit
 
-        # Crear preferencias si se proporcionaron
+        # Crear preferencias (dieta y gustos son obligatorios, alergias opcional)
         if preferencias_data and isinstance(preferencias_data, dict):
             dieta = preferencias_data.get('dieta')
-            alergias = preferencias_data.get('alergias', [])
             gustos = preferencias_data.get('gustos', [])
+            alergias = preferencias_data.get('alergias', [])  # Alergias es opcional
             
-            # Validar que alergias y gustos sean listas
+            # Validar que dieta y gustos estén presentes
+            if not dieta or not gustos:
+                return jsonify({'error': 'Datos inválidos'}), 400
+            
+            # Validar que gustos y alergias sean listas
+            if not isinstance(gustos, list):
+                return jsonify({'error': 'Datos inválidos'}), 400
             if not isinstance(alergias, list):
                 alergias = []
-            if not isinstance(gustos, list):
-                gustos = []
             
             nueva_preferencia = Preferencia(
                 usuario_id=nuevo_usuario.id,
@@ -377,6 +453,9 @@ def registrar_usuario():
                 gustos=gustos
             )
             db.session.add(nueva_preferencia)
+        else:
+            # Preferencias son obligatorias
+            return jsonify({'error': 'Datos inválidos'}), 400
 
         db.session.commit()
 
@@ -384,6 +463,8 @@ def registrar_usuario():
         print(f"  Nombre: {nombre}")
         print(f"  ID: {nuevo_usuario.id}")
         print(f"  País: {pais}")
+        print(f"  Nivel cocina: {nivel_cocina}")
+        print(f"  Metas nutricionales: {metas_nutricionales}")
         if preferencias_data:
             print(f"  Preferencias: {preferencias_data}")
 
@@ -394,6 +475,8 @@ def registrar_usuario():
             'nombre': nuevo_usuario.nombre,
             'email': nuevo_usuario.correo,
             'pais': nuevo_usuario.pais,
+            'nivel_cocina': nuevo_usuario.nivel_cocina,
+            'metas_nutricionales': nuevo_usuario.metas_nutricionales,
             'fecha_creacion': nuevo_usuario.fecha_creacion.isoformat() if nuevo_usuario.fecha_creacion else None
         }
         
