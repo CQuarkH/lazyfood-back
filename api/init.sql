@@ -12,7 +12,10 @@ CREATE TABLE usuario (
     pais VARCHAR(50),
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     nivel_cocina INTEGER DEFAULT 1,
-    activo BOOLEAN DEFAULT TRUE
+    metas_nutricionales VARCHAR(100),
+    activo BOOLEAN DEFAULT TRUE,
+    reset_token VARCHAR(255),
+    reset_token_expiration TIMESTAMP
 );
 
 -- Tabla de preferencias
