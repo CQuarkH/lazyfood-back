@@ -21,10 +21,11 @@ logger = logging.getLogger(__name__)
 
 # Configurar Gemini
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+MODEL = os.getenv("GEMINI_CV_MODEL", "gemini-2.0-flash")
 
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
-    model = genai.GenerativeModel('gemini-2.0-flash-exp')
+    model = genai.GenerativeModel(MODEL)
     logger.info("Modelo AI configurado")
 else:
     model = None
