@@ -331,12 +331,6 @@ def obtener_inventario():
       - Inventario
     security:
       - Bearer: []
-    parameters:
-      - name: detalle
-        in: query
-        type: boolean
-        required: false
-        description: Si true, devuelve más detalle (reservado / no totalmente implementado)
     responses:
       200:
         description: Inventario del usuario

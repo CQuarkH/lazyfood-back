@@ -115,12 +115,15 @@ def obtener_historial_recomendaciones():
 
 
 @recipe_bp.route('/v1/recetas/<int:receta_id>', methods=['GET'])
+@token_required
 def obtener_detalle_receta(receta_id):
     """
     Obtener detalle completo de una receta
     ---
     tags:
       - Recetas
+    security:
+      - Bearer: []
     parameters:
       - name: receta_id
         in: path
@@ -138,6 +141,10 @@ def obtener_detalle_receta(receta_id):
       description: Error interno del servidor
     """
     try:
+        user = request.current_user
+        if not user:
+            return jsonify({'error': 'Usuario no autenticado'}), 401
+
         from modules.recipe.models import Receta, PasoReceta
 
         receta = Receta.query.get(receta_id)
