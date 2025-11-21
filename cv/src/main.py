@@ -9,6 +9,8 @@ import io
 from datetime import datetime
 import logging
 import json
+import asyncio
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from ingredients_parser import parse_gemini_response_with_coords
 from ingredients_db import INGREDIENTS_DATABASE
@@ -75,19 +77,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-async def detect_with_gemini(image_bytes: bytes) -> tuple[str, tuple[int, int]]:
-    """Detecta ingredientes con coordenadas"""
+async def detect_with_gemini(image_bytes: bytes, max_retries: int = 3) -> tuple[str, tuple[int, int]]:
+    """Detecta ingredientes con coordenadas - CON RETRY AUTOMÁTICO"""
     
     if not model:
         raise HTTPException(500, "GOOGLE_API_KEY no configurada")
     
-    try:
-        # Cargar imagen y obtener dimensiones
-        image = Image.open(io.BytesIO(image_bytes))
-        image_dimensions = (image.width, image.height)
-        
-        # Prompt optimizado para ingredientes CON COORDENADAS
-        prompt = """Analiza esta imagen e identifica TODOS los ingredientes alimenticios visibles.
+    last_error = None
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            # Cargar imagen y obtener dimensiones
+            image = Image.open(io.BytesIO(image_bytes))
+            image_dimensions = (image.width, image.height)
+            
+            # Prompt optimizado para ingredientes CON COORDENADAS
+            prompt = """Analiza esta imagen e identifica TODOS los ingredientes alimenticios visibles.
 
 Para cada ingrediente, proporciona:
 1. Nombre específico del ingrediente en español
@@ -138,18 +143,43 @@ Ejemplo real:
 
 Analiza la imagen y responde ÚNICAMENTE con el JSON, sin texto adicional antes o después."""
 
-        logger.info("🤖 Detectando ingredientes...")
-        
-        # Generar respuesta
-        response = model.generate_content([prompt, image])
-        
-        logger.info("✅ Modelo AI respondió exitosamente")
-        
-        return response.text, image_dimensions
-        
-    except Exception as e:
-        logger.error(f"❌ Error con Modelo AI: {str(e)}")
-        raise HTTPException(500, f"Error procesando con Modelo AI: {str(e)}")
+            logger.info(f"🤖 Detectando ingredientes... (Intento {attempt}/{max_retries})")
+            
+            # Generar respuesta
+            response = model.generate_content([prompt, image])
+            
+            logger.info("✅ Modelo AI respondió exitosamente")
+            
+            return response.text, image_dimensions
+            
+        except Exception as e:
+            last_error = e
+            error_msg = str(e).lower()
+            
+            # Verificar si es error de rate limit
+            is_rate_limit = any(keyword in error_msg for keyword in [
+                'quota', 'rate limit', 'too many requests', 'resource exhausted',
+                '429', 'overloaded'
+            ])
+            
+            if is_rate_limit and attempt < max_retries:
+                # Espera exponencial: 2s, 4s, 8s
+                wait_time = 2 ** attempt
+                logger.warning(f"⚠️ Rate limit detectado. Reintentando en {wait_time}s... ({attempt}/{max_retries})")
+                await asyncio.sleep(wait_time)
+                continue
+            
+            # Si no es rate limit o ya agotamos reintentos
+            if attempt == max_retries:
+                logger.error(f"❌ Error después de {max_retries} intentos: {str(e)}")
+                raise HTTPException(500, f"Error procesando con Modelo AI después de {max_retries} intentos: {str(e)}")
+            
+            # Para otros errores, reintentamos con menos espera
+            logger.warning(f"⚠️ Error en intento {attempt}: {str(e)}. Reintentando...")
+            await asyncio.sleep(1)
+    
+    # Si llegamos aquí, algo salió mal
+    raise HTTPException(500, f"Error procesando imagen: {str(last_error)}")
 
 # ============ ENDPOINTS ============
 
