@@ -330,6 +330,7 @@ class RecommendationService:
                 'tiempo': s.receta.tiempo_preparacion,
                 'calorias': s.receta.calorias,
                 'nivel': s.receta.nivel_dificultad,
+                'emoji': s.receta.emoji,
                 'porcentaje_coincidencia': float(s.porcentaje_coincidencia) if s.porcentaje_coincidencia else 0,
                 'fecha': s.fecha.isoformat() if s.fecha else None
             })

@@ -53,6 +53,7 @@ class Planificador(db.Model):
                 resultado[fecha_str][plan.tipo_comida] = {
                     'receta_id': plan.receta_id,
                     'receta_nombre': plan.receta.nombre if plan.receta else None,
+                    'emoji': plan.receta.emoji if plan.receta else None,
                     'es_sugerida': plan.es_sugerida
                 }
 
