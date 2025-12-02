@@ -156,6 +156,95 @@ Reglas:
 """
         return prompt
 
+    def generar_ingredientes_receta(self, 
+                                     nombre_receta: str,
+                                     ingredientes_disponibles: List[str],
+                                     preferencias: Dict[str, Any] = None,
+                                     nivel_cocina: int = 1) -> List[Dict[str, Any]]:
+        """
+        Genera la lista de ingredientes específicos para una receta conocida.
+        Usa el nombre de la receta para generar ingredientes coherentes.
+        """
+        try:
+            preferencias = preferencias or {}
+            dieta = preferencias.get("dieta", "omnivoro")
+            alergias = ", ".join(preferencias.get("alergias", [])) if preferencias.get("alergias") else "ninguna"
+            ingredientes_txt = ", ".join(ingredientes_disponibles) if ingredientes_disponibles else "ninguno"
+            
+            prompt = f"""
+Eres un chef experto. Genera EXACTAMENTE los ingredientes necesarios para preparar la receta: "{nombre_receta}"
+
+CONTEXTO:
+- Ingredientes disponibles del usuario: {ingredientes_txt}
+- Dieta: {dieta}
+- Alergias: {alergias}
+
+INSTRUCCIONES IMPORTANTES:
+1. Genera SOLO los ingredientes REALES y NECESARIOS para "{nombre_receta}"
+2. NO inventes ingredientes aleatorios
+3. Si el usuario tiene algunos ingredientes disponibles, marca en_inventario=true
+4. Usa cantidades realistas y apropiadas
+5. Devuelve SOLO un ARRAY JSON (sin texto adicional)
+
+FORMATO EXACTO:
+[
+  {{
+    "nombre": "Papa",
+    "cantidad": 4,
+    "unidad": "unidades",
+    "emoji": "🥔",
+    "en_inventario": true
+  }},
+  {{
+    "nombre": "Zanahoria",
+    "cantidad": 2,
+    "unidad": "unidades",
+    "emoji": "🥕",
+    "en_inventario": false
+  }}
+]
+
+Genera AHORA la lista de ingredientes para "{nombre_receta}" en formato JSON:
+"""
+            
+            config = types.GenerateContentConfig(temperature=0)
+            response = self.model.generate_content(model=self.model_name, contents=prompt, config=config)
+            
+            texto = self._extract_text_from_sdk_response(response)
+            logger.debug(f"Gemini ingredientes para '{nombre_receta}' (trunc 1000): %s", texto[:1000])
+            
+            # Parsear el array de ingredientes
+            json_str = self._extract_first_json(texto)
+            if not json_str:
+                logger.warning(f"No se pudo extraer JSON de ingredientes para '{nombre_receta}'")
+                return []
+            
+            ingredientes_raw = json.loads(json_str)
+            if not isinstance(ingredientes_raw, list):
+                logger.warning(f"Respuesta no es un array para '{nombre_receta}'")
+                return []
+            
+            # Normalizar y limpiar
+            ingredientes_limpios = []
+            for ing in ingredientes_raw:
+                nombre_original = ing.get("nombre") or ing.get("name") or ""
+                nombre_limpio = self._remove_emojis(nombre_original)
+                
+                ingredientes_limpios.append({
+                    "nombre": nombre_limpio,
+                    "cantidad": ing.get("cantidad") or ing.get("quantity") or 0,
+                    "unidad": ing.get("unidad") or ing.get("unit") or "",
+                    "emoji": ing.get("emoji"),
+                    "en_inventario": bool(ing.get("en_inventario", False))
+                })
+            
+            return ingredientes_limpios
+            
+        except Exception as e:
+            logger.exception(f"Error generando ingredientes para '{nombre_receta}': %s", e)
+            return []
+
+
     # -------------------------
     # Método B: pasos detallados por receta (separado, on-demand)
     # -------------------------
@@ -464,13 +553,17 @@ RESPUESTA (SOLO JSON, sin explicaciones):
                 return []
             normalized = []
             for r in data:
+                # Limpiar emoji de la receta: tomar solo el primer emoji
+                emoji_receta = r.get("emoji") or "🍽️"
+                emoji_limpio = self._get_first_emoji(emoji_receta)
+                
                 receta = {
                     "nombre": r.get("nombre"),
                     "tiempo": int(r.get("tiempo")) if r.get("tiempo") is not None else None,
                     "calorias": int(r.get("calorias")) if r.get("calorias") is not None else None,
                     "nivel": int(r.get("nivel")) if r.get("nivel") is not None else 1,
                     "razon": r.get("razon") or "",
-                    "emoji": r.get("emoji") or "🍽️",
+                    "emoji": emoji_limpio,
                     "ingredientes": []
                 }
                 for ing in r.get("ingredientes", []):
@@ -486,6 +579,49 @@ RESPUESTA (SOLO JSON, sin explicaciones):
         except Exception as e:
             logger.exception("Error _parsear_array_recetas_es: %s", e)
             return []
+    
+    def _remove_emojis(self, text: str) -> str:
+        """Elimina todos los emojis de un texto"""
+        if not text:
+            return ""
+        # Patrón regex para detectar emojis
+        emoji_pattern = re.compile(
+            "[" 
+            "\U0001F600-\U0001F64F"  # emoticons
+            "\U0001F300-\U0001F5FF"  # símbolos & pictogramas
+            "\U0001F680-\U0001F6FF"  # transporte & símbolos de mapa
+            "\U0001F1E0-\U0001F1FF"  # banderas (iOS)
+            "\U00002702-\U000027B0"
+            "\U000024C2-\U0001F251"
+            "\U0001F900-\U0001F9FF"  # Suplemento de símbolos y pictogramas
+            "\U0001FA00-\U0001FA6F"  # Símbolos y pictogramas extendidos-A
+            "]+", 
+            flags=re.UNICODE
+        )
+        return emoji_pattern.sub('', text).strip()
+    
+    def _get_first_emoji(self, text: str) -> str:
+        """Extrae solo el primer emoji de un texto. Si no hay emojis, devuelve 🍽️"""
+        if not text:
+            return "🍽️"
+        # Patrón regex para detectar emojis
+        emoji_pattern = re.compile(
+            "["
+            "\U0001F600-\U0001F64F"  # emoticons
+            "\U0001F300-\U0001F5FF"  # símbolos & pictogramas
+            "\U0001F680-\U0001F6FF"  # transporte & símbolos de mapa
+            "\U0001F1E0-\U0001F1FF"  # banderas (iOS)
+            "\U00002702-\U000027B0"
+            "\U000024C2-\U0001F251"
+            "\U0001F900-\U0001F9FF"  # Suplemento de símbolos y pictogramas
+            "\U0001FA00-\U0001FA6F"  # Símbolos y pictogramas extendidos-A
+            "]",
+            flags=re.UNICODE
+        )
+        match = emoji_pattern.search(text)
+        if match:
+            return match.group()
+        return "🍽️"
 
     def _parsear_pasos(self, texto: str) -> List[Dict[str, Any]]:
         """Parsea array de pasos JSON y normaliza a {n,instruccion,timer}"""
