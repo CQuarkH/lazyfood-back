@@ -105,8 +105,15 @@ def generar_planificacion_por_ia():
       - Planificador
     security:
       - Bearer: []
+    parameters:
+      - name: fecha
+        in: query
+        type: string
+        format: date
+        required: false
+        description: Fecha de inicio de la semana (YYYY-MM-DD). Opcional si se envía en el body.
     requestBody:
-      required: false
+      required: true
       content:
         application/json:
           schema:
