@@ -1,0 +1,32 @@
+# Dockerfile.test
+# Dockerfile específico para ejecutar tests unitarios de lazyfood-back
+# No requiere PostgreSQL ni otros servicios externos
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copiar requirements
+COPY api/requirements.txt /app/api/requirements.txt
+
+# Instalar dependencias
+RUN pip install --no-cache-dir -r /app/api/requirements.txt && \
+    pip install --no-cache-dir pytest pytest-cov
+
+# Copiar código fuente
+COPY api/src /app/api/src
+COPY api/tests /app/api/tests
+COPY api/pytest.ini /app/api/pytest.ini
+
+# Establecer variables de entorno mínimas necesarias
+ENV PYTHONPATH=/app/api/src
+ENV GOOGLE_API_KEY=test_key_not_used_in_unit_tests
+ENV GEMINI_MODEL=gemini-2.0-flash-exp
+ENV DATABASE_URL=postgresql://test:test@localhost/test
+
+WORKDIR /app/api
+
+# Comando para ejecutar solo tests unitarios
+# -m unit: ejecuta solo tests marcados como 'unit'
+# Si no hay markers específicos, ejecuta todos los tests en tests/unit/
+CMD ["pytest", "tests/unit/", "-v", "--tb=short", "--color=yes"]
