@@ -66,10 +66,10 @@ def create_app():
     try:
         init_db(app)
         
-        # Configuración de CORS completa
+        # Configuración de CORS completa - Permitir todos los orígenes
         CORS(app, 
              resources={r"/*": {
-                 "origins": Config.CORS_ORIGINS,
+                 "origins": "*",
                  "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
                  "allow_headers": [
                      "Content-Type", 
@@ -97,13 +97,12 @@ def create_app():
     # Middleware adicional para asegurar headers CORS en todas las respuestas
     @app.after_request
     def after_request(response):
-        origin = request.headers.get('Origin')
-        if origin in Config.CORS_ORIGINS:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept'
-            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+        # Permitir todos los orígenes
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
         return response
 
     # Registrar manejadores de error globales
