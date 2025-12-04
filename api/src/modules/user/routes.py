@@ -805,10 +805,22 @@ def actualizar_preferencias():
             # Actualizar preferencias existentes
             if dieta is not None:
                 usuario.preferencias.dieta = dieta
-            if alergias:
-                usuario.preferencias.alergias = alergias
-            if gustos:
-                usuario.preferencias.gustos = gustos
+            
+            # Verificar explícitamente si se enviaron alergias
+            if 'alergias' in data:
+                alergias_val = data.get('alergias')
+                if isinstance(alergias_val, list):
+                    usuario.preferencias.alergias = alergias_val
+                else:
+                    usuario.preferencias.alergias = []
+            
+            # Verificar explícitamente si se enviaron gustos
+            if 'gustos' in data:
+                gustos_val = data.get('gustos')
+                if isinstance(gustos_val, list):
+                    usuario.preferencias.gustos = gustos_val
+                else:
+                    usuario.preferencias.gustos = []
         else:
             # Crear nuevas preferencias
             nueva_preferencia = Preferencia(

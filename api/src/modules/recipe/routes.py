@@ -146,19 +146,58 @@ def obtener_detalle_receta(receta_id):
             return jsonify({'error': 'Usuario no autenticado'}), 401
 
         from modules.recipe.models import Receta, PasoReceta
+        from modules.inventory.models import Inventario
 
         receta = Receta.query.get(receta_id)
         if not receta:
             return jsonify({'error': 'Receta no encontrada'}), 404
 
         pasos = PasoReceta.query.filter_by(receta_id=receta_id).order_by(PasoReceta.numero_paso).all()
+        
+        # Obtener ingredientes del inventario del usuario y generar con Gemini
+        ingredientes_lista = []
+        try:
+            inventario_items = Inventario.query.filter_by(usuario_id=user.id).all()
+            ingredientes_usuario = [item.ingrediente.nombre for item in inventario_items if getattr(item, "ingrediente", None)]
+            
+            preferencias = {}
+            if getattr(user, "preferencias", None):
+                try:
+                    preferencias = user.preferencias.to_dict()
+                except Exception:
+                    preferencias = {
+                        'dieta': getattr(user.preferencias, 'dieta', None),
+                        'alergias': getattr(user.preferencias, 'alergias', []) or [],
+                        'gustos': getattr(user.preferencias, 'gustos', []) or []
+                    }
+            
+            # Usar Gemini para generar ingredientes especificos para esta receta
+            from modules.ai.gemini_service import gemini_service
+            
+            logger.debug(f"Solicitando ingredientes específicos para '{receta.nombre}' a Gemini")
+            ingredientes_lista = gemini_service.generar_ingredientes_receta(
+                nombre_receta=receta.nombre,
+                ingredientes_disponibles=ingredientes_usuario,
+                preferencias=preferencias,
+                nivel_cocina=user.nivel_cocina
+            )
+            
+            logger.debug(f"Ingredientes generados: {len(ingredientes_lista)} para '{receta.nombre}'")
+                
+        except Exception as e:
+            logger.exception(f"Error obteniendo ingredientes para receta {receta_id}")
+            ingredientes_lista = []
+        
+        nivel_texto = 'Fácil' if receta.nivel_dificultad == 1 else ('Medio' if receta.nivel_dificultad == 2 else 'Difícil')
+        
         respuesta = {
             'id': receta.id,
             'nombre': receta.nombre,
-            'tiempo': receta.tiempo_preparacion,
+            'tiempo_preparacion': receta.tiempo_preparacion,
             'calorias': receta.calorias,
-            'nivel': receta.nivel_dificultad,
+            'nivel_dificultad': nivel_texto,
             'emoji': receta.emoji,
+            'ingredientes': ingredientes_lista,
             'pasos': [p.to_dict() for p in pasos]
         }
         return jsonify(respuesta), 200
