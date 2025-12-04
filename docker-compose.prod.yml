@@ -1,0 +1,73 @@
+services:
+  ml-service:
+    image: ${DOCKER_REGISTRY}/lazyfood-ml:latest
+    container_name: lazyfood-ml
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GOOGLE_API_KEY=${GOOGLE_AI_API_KEY}
+      - GEMINI_CV_MODEL=${GEMINI_CV_MODEL}
+    networks:
+      - lazyfood-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    image: ${DOCKER_REGISTRY}/lazyfood-backend:latest
+    container_name: lazyfood-backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - ML_SERVICE_URL=http://ml-service:8001
+      - DATABASE_URL=${DATABASE_URL}
+      - GOOGLE_API_KEY=${GOOGLE_AI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG}
+    depends_on:
+      ml-service:
+        condition: service_healthy
+      db:
+        condition: service_started
+    networks:
+      - lazyfood-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: lazyfood-db
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - lazyfood-network
+    restart: unless-stopped
+
+networks:
+  lazyfood-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
