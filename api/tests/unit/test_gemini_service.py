@@ -122,7 +122,7 @@ class TestParsearArrayRecetasEs:
         assert result[0]['nombre'] == 'Test'
         assert result[0]['tiempo'] is None
         assert result[0]['nivel'] == 1  # valor por defecto
-        assert result[0]['emoji'] == '🍽️'  # valor por defecto
+        assert result[0]['emoji'] == '🍽'  # valor por defecto (sin variation selector)
     
     def test_parse_multiple_recipes(self, gemini_service):
         """Debe parsear múltiples recetas"""
