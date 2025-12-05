@@ -4,6 +4,7 @@ from modules.user.models import Usuario, Preferencia
 from core.auth_middleware import token_required
 from core.role_middleware import role_required, admin_required, owner_or_admin_required
 from core.email_service import EmailService
+from core.config import Config
 import bcrypt
 import secrets
 from datetime import datetime, timedelta
@@ -949,8 +950,8 @@ def recuperar_password():
         usuario.reset_token_expiration = expiracion
         db.session.commit()
         
-        # Construir link de recuperación
-        link_recuperacion = f"http://localhost:5000/reset-password?token={token}"
+        # Construir link de recuperación que apunta al frontend
+        link_recuperacion = f"{Config.FRONTEND_URL}/reset-password?token={token}"
         
         # Enviar email
         email_enviado, mensaje = EmailService.send_password_reset_email(
