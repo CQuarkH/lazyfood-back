@@ -951,7 +951,7 @@ def recuperar_password():
         db.session.commit()
         
         # Construir link de recuperación que apunta al frontend
-        link_recuperacion = f"{Config.FRONTEND_URL}/reset-password?token={token}"
+        link_recuperacion = f"http://200.13.5.10:5000/reset-password?token={token}"
         
         # Enviar email
         email_enviado, mensaje = EmailService.send_password_reset_email(
